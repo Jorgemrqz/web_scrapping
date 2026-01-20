@@ -144,32 +144,38 @@ def scrape_facebook(topic, email, password):
                  # Alternativas comunes en FB
                  posts = page.locator('div[data-ad-preview="message"]').locator("..").locator("..").locator("..")
             
+            # === Scroll Infinito Controlado ===
+            TARGET_POSTS = 25
+            print(f"[Facebook] Objetivo: Obtener al menos {TARGET_POSTS} posts...")
+            
+            scroll_attempts = 0
+            max_scrolls = 10 # Seguridad
+            
+            while posts.count() < TARGET_POSTS and scroll_attempts < max_scrolls:
+                print(f"[Facebook] Scroll {scroll_attempts+1}/{max_scrolls} (Posts actuales: {posts.count()})...")
+                page.mouse.wheel(0, 4000) # Scroll largo
+                time.sleep(4) # Esperar a que cargue contenido
+                
+                # Re-seleccionar posts para actualizar conteo
+                if feed.count() > 0:
+                    posts = feed.locator('div[role="article"]')
+                    if posts.count() == 0:
+                        posts = feed.locator('div[aria-posinset]')
+                else:
+                    posts = page.locator('div[role="article"]')
+                    if posts.count() == 0:
+                         posts = page.locator('div[aria-posinset]')
+                
+                scroll_attempts += 1
+                
             count = posts.count()
+            print(f"[Facebook] Se encontraron {count} posts tras el scroll.")
             
-            if count == 0:
-                print("[Facebook] ! No se encontraron posts. Tomando captura de pantalla de debug...")
-                page.screenshot(path="debug_facebook_noposts.png")
-                
-                # --- DEBUG: Guardar HTML de la página para ver por qué falla ---
-                try:
-                    with open("debug_feed_error.html", "w", encoding="utf-8") as f:
-                        f.write(page.content())
-                    print("[Facebook] HTML del error guardado en 'debug_feed_error.html'.")
-                except:
-                    pass
-                # ---------------------------------------------------------------
-                
-                # Intento de scroll desesperado
-                page.mouse.wheel(0, 1000)
-                time.sleep(3)
-                # Re-intentar búsqueda amplia
-                posts = page.locator('div[role="article"]') 
-                count = posts.count()
-
-            print(f"[Facebook] Se encontraron {count} posts en el feed.")
+            # Limitar a los que pidió el usuario
+            process_limit = min(count, TARGET_POSTS)
             
-            # Iterar sobre TODOS los posts encontrados
-            for i in range(count):
+            # Iterar sobre los posts requeridos
+            for i in range(process_limit):
                 print(f"\n[Facebook] --- Procesando Post {i+1} de {count} ---")
                 
                 # Re-localizar posts en cada iteración por si el DOM cambió (Lógica robusta)
@@ -347,7 +353,8 @@ def scrape_facebook(topic, email, password):
                         except:
                             pass
                     print(f"[Facebook] Extracción finalizada (modo bruto). {extract_count} elementos.")
-                    return results
+                    # NO retornamos aquí para permitir seguir con el siguiente post
+                    # return results
 
                 c_count = comments_loc.count()
                 print(f"[Facebook] {c_count} candidatos a comentarios detectados.")
