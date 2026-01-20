@@ -1,0 +1,19 @@
+# Excluir configuración con contraseñas
+config.py
+
+# Excluir perfiles de navegador y cookies
+auth_profile/
+
+# Excluir entornos virtuales y cachés de Python
+venv/
+__pycache__/
+*.py[cod]
+
+# Excluir datos scrapeados y logs
+data/
+*.json
+
+# Excluir archivos de debug generados por el scraper
+debug_*.html
+debug_*.png
+*.log
