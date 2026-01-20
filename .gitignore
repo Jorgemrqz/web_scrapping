@@ -3,6 +3,7 @@ config.py
 
 # Excluir perfiles de navegador y cookies
 auth_profile/
+auth_profile_linkedin/
 
 # Excluir entornos virtuales y cachés de Python
 venv/
