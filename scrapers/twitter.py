@@ -5,6 +5,8 @@ from typing import Dict, List
 
 from playwright.sync_api import TimeoutError, sync_playwright
 
+import config
+
 # This scraper reuses a real session and adds delays; it does not attempt to bypass CAPTCHAs or anti-bot systems.
 
 SLEEP_MIN = 1.0
@@ -153,18 +155,48 @@ def scrape_twitter(topic: str, username: str, password: str) -> List[Dict[str, s
     results: List[Dict[str, str]] = []
     print(f"[X] Iniciando hilo para: {topic}")
 
-    user_data_dir = os.path.join(os.getcwd(), "auth_profile_x")
-    os.makedirs(user_data_dir, exist_ok=True)
+    if config.X_PROFILE_PATH:
+        user_data_dir = config.X_PROFILE_PATH
+    else:
+        user_data_dir = os.path.join(os.getcwd(), "auth_profile_x")
+        os.makedirs(user_data_dir, exist_ok=True)
 
     with sync_playwright() as p:
+        context = None
+        browser = None
         try:
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                headless=False,
-                locale="es-ES",
-            )
+            if config.X_REMOTE_DEBUGGING_URL:
+                browser = p.chromium.connect_over_cdp(config.X_REMOTE_DEBUGGING_URL)
+                if browser.contexts:
+                    context = browser.contexts[0]
+                else:
+                    context = browser.new_context()
+            else:
+                args = [
+                    "--start-maximized",
+                    "--disable-gpu",
+                    "--no-sandbox",
+                    "--disable-features=FedCm,FederatedCredentialManagement,PrivacySandboxAdsApis",
+                ]
+                if config.X_PROFILE_PATH and config.X_PROFILE_DIRECTORY:
+                    args.append(f"--profile-directory={config.X_PROFILE_DIRECTORY}")
+
+                launch_kwargs = {
+                    "user_data_dir": user_data_dir,
+                    "headless": False,
+                    "locale": "es-ES",
+                    "args": args,
+                }
+                if config.X_BROWSER_CHANNEL:
+                    launch_kwargs["channel"] = config.X_BROWSER_CHANNEL
+
+                context = p.chromium.launch_persistent_context(**launch_kwargs)
         except Exception as exc:
             print(f"[X] No se pudo iniciar el navegador persistente: {exc}")
+            return results
+
+        if context is None:
+            print("[X] No se pudo obtener un contexto de navegador para scraping.")
             return results
 
         page = context.pages[0] if context.pages else context.new_page()
@@ -233,9 +265,16 @@ def scrape_twitter(topic: str, username: str, password: str) -> List[Dict[str, s
         except Exception as exc:
             print(f"[X] Error inesperado: {exc}")
         finally:
-            try:
-                context.close()
-            except Exception:
-                pass
+            if config.X_REMOTE_DEBUGGING_URL:
+                try:
+                    if browser:
+                        browser.close()
+                except Exception:
+                    pass
+            else:
+                try:
+                    context.close()
+                except Exception:
+                    pass
 
     return results
