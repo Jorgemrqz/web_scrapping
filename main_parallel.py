@@ -139,9 +139,9 @@ if __name__ == "__main__":
             # (Excel no soporta ciertos caracteres de control)
             df = df.applymap(lambda x: x.encode('unicode_escape').decode('utf-8') if isinstance(x, str) else x)
 
-            df.to_excel(excel_filename, index=False)
+            # df.to_excel(excel_filename, index=False) # Excel desactivado a petición
             df.to_csv(csv_filename, index=False, encoding="utf-8-sig")
-            print(f"[Export] Datos exportados también a {excel_filename} y {csv_filename}")
+            print(f"[Export] Datos exportados también a {csv_filename}")
         except Exception as e:
             print(f"[Export Error] No se pudo exportar a Excel/CSV: {e}")
 

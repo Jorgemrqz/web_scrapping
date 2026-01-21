@@ -23,20 +23,18 @@ except LookupError:
 def load_data(data_dir="data", topic=None):
     all_posts = []
     # Filtrar por topic si se da, sino cargar todo
-    pattern = f"corpus_{topic}.json" if topic else "*.json"
-    json_files = glob.glob(os.path.join(data_dir, pattern))
+    pattern = f"corpus_{topic}.csv" if topic else "*.csv"
+    csv_files = glob.glob(os.path.join(data_dir, pattern))
     
-    print(f"[NLP] Encontrados {len(json_files)} archivos JSON en {data_dir} (filtro: {pattern})")
+    print(f"[NLP] Encontrados {len(csv_files)} archivos CSV en {data_dir} (filtro: {pattern})")
     
-    for file in json_files:
+    for file in csv_files:
         try:
-            with open(file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                # Normalizar si es lista o dict
-                if isinstance(data, list):
-                    all_posts.extend(data)
-                elif isinstance(data, dict):
-                    all_posts.append(data)
+            import pandas as pd
+            df = pd.read_csv(file)
+            # Convertir DataFrame a lista de diccionarios
+            data = df.to_dict(orient='records')
+            all_posts.extend(data)
         except Exception as e:
             print(f"[NLP] Error leyendo {file}: {e}")
             
@@ -65,7 +63,7 @@ def clean_text(text):
 def process_nlp(posts):
     # Inicializar herramientas
     stop_words = set(stopwords.words('spanish'))
-    # Agregar stopwords personalizadas comunes en redes
+    # Agregar stopwords 
     stop_words.update(["si", "q", "ma", "pa", "ver", "mas", "va", "ser", "hacer", "linkedin", "twitter", "facebook"])
     
     stemmer = SnowballStemmer('spanish')
@@ -90,9 +88,6 @@ def process_nlp(posts):
         filtered_tokens = [t for t in tokens if t not in stop_words and len(t) > 2]
         
         # 4. Stemming (Convertir a forma canónica)
-        # Nota: Para WordCloud a veces es mejor usar lemas o la palabra original limpia, 
-        # porque el stemming corta palabras (ej. "inteligencia" -> "intelig").
-        # Aquí guardaremos ambos para mostrar.
         stemmed_tokens = [stemmer.stem(t) for t in filtered_tokens]
         
         corpus_tokens.extend(filtered_tokens) # Usamos tokens completos para la nube visual

@@ -29,7 +29,7 @@ def scrape_facebook(topic, email, password, target_count=10):
         try:
             browser = p.chromium.launch_persistent_context(
                 user_data_dir,
-                headless=True,
+                headless=False,
                 args=args_list,
                 locale='es-ES',
                 viewport=None
