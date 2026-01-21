@@ -3,6 +3,7 @@ config.py
 
 # Excluir perfiles de navegador y cookies
 auth_profile/
+auth_profile_x/
 auth_profile_linkedin/
 
 # Excluir entornos virtuales y cachés de Python
@@ -18,3 +19,7 @@ data/
 debug_*.html
 debug_*.png
 *.log
+
+.venv/
+
+chrome_debug_profile/
