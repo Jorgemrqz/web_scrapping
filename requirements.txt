@@ -1,2 +1,8 @@
 playwright
 pytest-playwright
+nltk
+pandas
+matplotlib
+wordcloud
+scikit-learn
+openpyxl

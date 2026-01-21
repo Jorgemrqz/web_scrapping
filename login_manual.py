@@ -9,6 +9,7 @@ import config
 SITE_MAP = {
     "facebook": ("auth_profile", "https://www.facebook.com/"),
     "x": ("auth_profile_x", "https://x.com/login"),
+    "linkedin": ("auth_profile_linkedin", "https://www.linkedin.com/login"),
 }
 
 
@@ -27,7 +28,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--profile-path",
-        default=config.X_PROFILE_PATH or None,
+        default=None,
         help="Ruta al directorio de datos de usuario de Chrome/Chromium",
     )
     parser.add_argument(
@@ -45,9 +46,15 @@ def manual_login(
     profile_directory: str | None,
 ) -> None:
     profile_dir, start_url = SITE_MAP[site]
+    
+    # Determinar ruta del perfil
     if profile_path:
         user_data_dir = profile_path
+    elif site == "x" and config.X_PROFILE_PATH:
+        # Solo usar config.X_PROFILE_PATH si estamos en X
+        user_data_dir = config.X_PROFILE_PATH
     else:
+        # Por defecto usar el directorio del mapa (ej. auth_profile_linkedin)
         user_data_dir = os.path.join(os.getcwd(), profile_dir)
 
     os.makedirs(user_data_dir, exist_ok=True)

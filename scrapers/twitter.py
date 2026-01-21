@@ -151,9 +151,9 @@ def scrape_conversation(context, url: str) -> Dict[str, List[Dict[str, str]]]:
     return convo_results
 
 
-def scrape_twitter(topic: str, username: str, password: str) -> List[Dict[str, str]]:
+def scrape_twitter(topic: str, username: str, password: str, target_count: int = 10) -> List[Dict[str, str]]:
     results: List[Dict[str, str]] = []
-    print(f"[X] Iniciando hilo para: {topic}")
+    print(f"[X] Iniciando hilo para: {topic} | Meta: {target_count}")
 
     if config.X_PROFILE_PATH:
         user_data_dir = config.X_PROFILE_PATH
@@ -177,6 +177,7 @@ def scrape_twitter(topic: str, username: str, password: str) -> List[Dict[str, s
                     "--disable-gpu",
                     "--no-sandbox",
                     "--disable-features=FedCm,FederatedCredentialManagement,PrivacySandboxAdsApis",
+                    "--disable-blink-features=AutomationControlled",
                 ]
                 if config.X_PROFILE_PATH and config.X_PROFILE_DIRECTORY:
                     args.append(f"--profile-directory={config.X_PROFILE_DIRECTORY}")
@@ -215,6 +216,7 @@ def scrape_twitter(topic: str, username: str, password: str) -> List[Dict[str, s
             tweets = page.locator('article[data-testid="tweet"]')
             seen_urls = set()
             scrolls = 0
+            TARGET_TWEETS = target_count
             while tweets.count() < TARGET_TWEETS and scrolls < MAX_SCROLLS:
                 page.mouse.wheel(0, 2000)
                 human_delay(1.3)
