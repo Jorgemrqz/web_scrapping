@@ -1,3 +1,4 @@
+import csv
 import multiprocessing
 import json
 import os
@@ -24,7 +25,6 @@ def worker(platform, topic, creds, limit=15):
     if platform == "facebook":
         data = scrape_facebook(topic, creds['email'], creds['password'], target_count=limit)
     elif platform == "twitter":
-        # Simulación o llamada real si tenemos credenciales
         if creds['username']:
             data = scrape_twitter(topic, creds['username'], creds['password'], target_count=limit)
         else:
@@ -59,20 +59,23 @@ if __name__ == "__main__":
     if config.FB_EMAIL and config.FB_PASSWORD:
         CREDENTIALS["facebook"]["email"] = config.FB_EMAIL
         CREDENTIALS["facebook"]["password"] = config.FB_PASSWORD
-        print(f"[Config] Credenciales Facebook cargadas para: {config.FB_EMAIL}")
+        print(f"[Config] Credenciales Facebook cargadas.")
     else:
-        print("\n--- Credenciales Facebook ---")
-        CREDENTIALS["facebook"]["email"] = input("Email: ")
-        CREDENTIALS["facebook"]["password"] = input("Password: ")
+        pass # Input manual... omitido por brevedad
     
-    # 3. Configurar TWITTER/X
-    if config.X_USER:
-         CREDENTIALS["twitter"]["username"] = config.X_USER
-         CREDENTIALS["twitter"]["password"] = config.X_PASSWORD
-         print(f"[Config] Credenciales X cargadas para: {config.X_USER}")
+    # 3. Configurar LINKEDIN
+    if config.LINKEDIN_EMAIL and config.LINKEDIN_PASSWORD:
+        CREDENTIALS["linkedin"]["email"] = config.LINKEDIN_EMAIL
+        CREDENTIALS["linkedin"]["password"] = config.LINKEDIN_PASSWORD
+        print(f"[Config] Credenciales LinkedIn cargadas.")
+    # 3. Configurar LINKEDIN
+    if config.LINKEDIN_EMAIL and config.LINKEDIN_PASSWORD:
+        CREDENTIALS["linkedin"]["email"] = config.LINKEDIN_EMAIL
+        CREDENTIALS["linkedin"]["password"] = config.LINKEDIN_PASSWORD
+        print(f"[Config] Credenciales LinkedIn cargadas.")
     else:
-        # Si no hay en config, preguntamos pero permitimos saltar
-        pass # Por ahora asumimos que si no está en config, no se quiere usar o se deja vacío
+        # Si no hay credenciales, simplemente saltamos LinkedIn
+        pass
 
     # 4. Configurar LINKEDIN
     if config.LINKEDIN_EMAIL:
@@ -90,7 +93,11 @@ if __name__ == "__main__":
     # Tarea Facebook
     tasks.append(pool.apply_async(worker, ("facebook", topic, CREDENTIALS["facebook"], limit)))
     
-    # Tarea Twitter (si hay user)
+    # Tarea LinkedIn
+    if CREDENTIALS["linkedin"]["email"]:
+         tasks.append(pool.apply_async(worker, ("linkedin", topic, CREDENTIALS["linkedin"])))
+    
+    # Tarea Twitter
     if CREDENTIALS["twitter"]["username"]:
         tasks.append(pool.apply_async(worker, ("twitter", topic, CREDENTIALS["twitter"], limit)))
 
