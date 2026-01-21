@@ -5,6 +5,7 @@ import os
 from scrapers.facebook import scrape_facebook
 from scrapers.twitter import scrape_twitter
 from scrapers.linkedin import scrape_linkedin
+from scrapers.instagram import scrape_instagram
 
 import config
 
@@ -13,6 +14,7 @@ CREDENTIALS = {
     "facebook": {"email": "", "password": ""},
     "twitter": {"username": "", "password": ""},
     "linkedin": {"email": "", "password": ""},
+    "instagram": {"username": "", "password": ""},
 }
 
 import pandas as pd
@@ -32,6 +34,8 @@ def worker(platform, topic, creds, limit=15):
     elif platform == "linkedin":
         if creds['email'] or True: # Permitir intento con cookies guardadas
             data = scrape_linkedin(topic, creds['email'], creds['password'], target_count=limit)
+    elif platform == "instagram":
+        data = scrape_instagram(topic, creds['username'], creds['password'], target_count=limit)
     
     return data
 
@@ -73,7 +77,7 @@ if __name__ == "__main__":
     
     # Crear procesos
     # Usamos multiprocessing para cumplir con el requisito académico
-    pool = multiprocessing.Pool(processes=3) # Número de redes a scrapear
+    pool = multiprocessing.Pool(processes=4) # Número de redes a scrapear
     
     tasks = []
     # Tarea Facebook
@@ -86,6 +90,8 @@ if __name__ == "__main__":
     # Tarea LinkedIn
     # Se añade siempre, el worker decide si tiene credenciales o intenta con cookies
     tasks.append(pool.apply_async(worker, ("linkedin", topic, CREDENTIALS["linkedin"], limit)))
+
+    tasks.append(pool.apply_async(worker, ("instagram", topic, CREDENTIALS["instagram"], limit)))
     
     # Recolectar resultados
     all_data = []
