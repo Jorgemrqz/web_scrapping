@@ -20,11 +20,13 @@ except LookupError:
     nltk.download('stopwords')
     nltk.download('punkt_tab')
 
-def load_data(data_dir="data"):
+def load_data(data_dir="data", topic=None):
     all_posts = []
-    json_files = glob.glob(os.path.join(data_dir, "*.json"))
+    # Filtrar por topic si se da, sino cargar todo
+    pattern = f"corpus_{topic}.json" if topic else "*.json"
+    json_files = glob.glob(os.path.join(data_dir, pattern))
     
-    print(f"[NLP] Encontrados {len(json_files)} archivos JSON en {data_dir}")
+    print(f"[NLP] Encontrados {len(json_files)} archivos JSON en {data_dir} (filtro: {pattern})")
     
     for file in json_files:
         try:
@@ -103,10 +105,13 @@ def process_nlp(posts):
 
     return corpus_tokens, processed_docs
 
-def generate_visualizations(tokens, output_dir="data"):
+def generate_visualizations(tokens, output_dir="data", topic=None):
     if not tokens:
         print("[NLP] No hay suficientes datos para visualizar.")
         return
+
+    # Suffix para nombres de archivo
+    suffix = f"_{topic}" if topic else ""
 
     # a) Bolsa de Palabras (Frecuencia)
     word_freq = Counter(tokens)
@@ -120,11 +125,13 @@ def generate_visualizations(tokens, output_dir="data"):
     plt.figure(figsize=(10, 6))
     words, counts = zip(*common_words)
     plt.bar(words, counts)
-    plt.title("Top 20 Palabras Frecuentes")
+    plt.title(f"Top 20 Palabras Frecuentes {suffix}")
     plt.xticks(rotation=45)
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'frecuencia_palabras.png'))
-    print(f"[NLP] Gráfico de frecuencias guardado en {output_dir}/frecuencia_palabras.png")
+    
+    freq_filename = f'frecuencia_palabras{suffix}.png'
+    plt.savefig(os.path.join(output_dir, freq_filename))
+    print(f"[NLP] Gráfico de frecuencias guardado en {output_dir}/{freq_filename}")
     
     # b) Nube de Palabras
     text_for_cloud = " ".join(tokens)
@@ -133,26 +140,31 @@ def generate_visualizations(tokens, output_dir="data"):
     plt.figure(figsize=(10, 6))
     plt.imshow(wordcloud, interpolation='bilinear')
     plt.axis("off")
-    plt.title("Nube de Palabras")
+    plt.title(f"Nube de Palabras {suffix}")
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'wordcloud.png'))
-    print(f"[NLP] WordCloud guardado en {output_dir}/wordcloud.png")
+    
+    wc_filename = f'wordcloud{suffix}.png'
+    plt.savefig(os.path.join(output_dir, wc_filename))
+    print(f"[NLP] WordCloud guardado en {output_dir}/{wc_filename}")
 
-if __name__ == "__main__":
+def run_nlp_pipeline(topic=None):
     # Asegurar directorio de datos
     if not os.path.exists("data"):
         os.makedirs("data")
         
     # Cargar datos
-    data = load_data()
+    data = load_data(topic=topic)
     
     if data:
         # Procesar
         all_tokens, processed_data = process_nlp(data)
         
         # Visualizar
-        generate_visualizations(all_tokens)
+        generate_visualizations(all_tokens, topic=topic)
         
         print("\n[NLP] Pipeline finalizado exitosamente.")
     else:
         print("[NLP] No se encontraron datos para procesar. Ejecuta primero main_parallel.py")
+
+if __name__ == "__main__":
+    run_nlp_pipeline()

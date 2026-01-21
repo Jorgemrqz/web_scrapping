@@ -58,8 +58,8 @@ def extract_comments(page, caption: str = "", max_comments: int = 8):
     """)
 
     bad_substrings = [
-        "me gusta", "likes", "reply", "responder",
-        "ver traducción", "see translation",
+        "me gusta", "likes", "reply", "responder", "respuestas", "replies",
+        "ver traducción", "see translation", "ver las", "view all", "view more",
         "agrega un comentario", "add a comment",
         "seguir", "follow"
     ]
@@ -256,10 +256,21 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
                     "type": "post",
                     "author": "Desconocido",
                     "content": clean_text,
-                    "comments": post_comments,
+                    "comments": post_comments, # Mantenemos por referencia
                     "url": post_url,
                     "urn": f"ig_{random.randint(100000, 999999)}",
                 })
+
+                # --- NUEVO: Aplanar comentarios para NLP ---
+                # Agregar los comentarios como registros independientes
+                for comment_text in post_comments:
+                    results.append({
+                        "source": "Instagram",
+                        "type": "comment",
+                        "author": "Desconocido",
+                        "content": comment_text,
+                        "parent_url": post_url
+                    })
 
                 human_delay()
 

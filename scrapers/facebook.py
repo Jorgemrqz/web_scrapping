@@ -225,7 +225,7 @@ def scrape_facebook(topic, email, password, target_count=10):
                    pass
 
                 # ESTRATEGIA: Buscar botón de "X comentarios"
-                print("[Facebook] Buscando botón de recuento de comentarios...")
+                # print("[Facebook] Buscando botón de recuento de comentarios...")
                 clicked = False
                 
                 try:
@@ -233,7 +233,7 @@ def scrape_facebook(topic, email, password, target_count=10):
                     comment_count_btn = first_post.locator('div[role="button"], span[role="button"]').filter(has_text=re.compile(r"\d+\s+comentarios?", re.IGNORECASE)).first
                     
                     if comment_count_btn.count() > 0:
-                        print("[Facebook] Botón de recuento de comentarios encontrado. Click...")
+                        # print("[Facebook] Botón de recuento de comentarios encontrado. Click...")
                         comment_count_btn.click(force=True)
                         clicked = True
                     else:
@@ -349,7 +349,7 @@ def scrape_facebook(topic, email, password, target_count=10):
                                     "content": txt
                                 })
                                 extract_count += 1
-                                print(f"  [Debug Raw] Texto encontrado: {txt[:30]}...")
+                                # print(f"  [Debug Raw] Texto encontrado: {txt[:30]}...")
                         except:
                             pass
                     print(f"[Facebook] Extracción finalizada (modo bruto). {extract_count} elementos.")
@@ -398,7 +398,10 @@ def scrape_facebook(topic, email, password, target_count=10):
                         clean_text = c_text.replace("\n", " ").strip()
                         
                         # --- DEBUG EXTRA ---
-                        print(f"  [Debug] Comentario {i}: Autor='{author}' | Texto='{clean_text[:30]}...'")
+                        clean_text = c_text.replace("\n", " ").strip()
+                        
+                        # --- DEBUG EXTRA ---
+                        # print(f"  [Debug] Comentario {i}: Autor='{author}' | Texto='{clean_text[:30]}...'")
                         # -------------------
 
                         # Guardar (Validación simplificada al máximo para debug)

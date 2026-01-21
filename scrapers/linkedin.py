@@ -8,7 +8,7 @@ def human_delay(min_s=2, max_s=5):
 
 def scrape_linkedin(topic, email, password, target_count=10):
     results = []
-    print(f"[LinkedIn DEBUG] Iniciando hilo DEFINITIVO (v3.0 - JS FORCE) para: {topic} | Objetivo: {target_count}")
+    print(f"[LinkedIn] Iniciando hilo para: {topic} | Objetivo: {target_count}")
     
     user_data_dir = os.path.join(os.getcwd(), "auth_profile_linkedin")
     
@@ -184,7 +184,7 @@ def scrape_linkedin(topic, email, password, target_count=10):
                     result_obj = page.evaluate(js_script)
                     candidates = result_obj.get("items", [])
                     
-                    print(f"[LinkedIn DEBUG] Scroll {scroll_attempts}: JS vio {len(candidates)} items.")
+                    # print(f"[LinkedIn DEBUG] Scroll {scroll_attempts}: JS vio {len(candidates)} items.")
                     
                     added_in_chunk = 0
                     for c in candidates:
@@ -204,7 +204,7 @@ def scrape_linkedin(topic, email, password, target_count=10):
                            })
                            extracted_count += 1
                            added_in_chunk += 1
-                           print(f"   -> [NUEVO] {c['author']}: {preview}")
+                           # print(f"   -> [NUEVO] {c['author']}: {preview}")
                     
                     if added_in_chunk == 0:
                         consecutive_zero_results += 1

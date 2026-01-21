@@ -5,6 +5,7 @@ config.py
 auth_profile/
 auth_profile_x/
 auth_profile_linkedin/
+auth_profile_instagram/
 
 # Excluir entornos virtuales y cachés de Python
 venv/

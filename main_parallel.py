@@ -1,11 +1,12 @@
-import csv
 import multiprocessing
 import json
 import os
+from datetime import datetime
 from scrapers.facebook import scrape_facebook
 from scrapers.twitter import scrape_twitter
 from scrapers.linkedin import scrape_linkedin
 from scrapers.instagram import scrape_instagram
+import nlp_pipeline
 
 import config
 
@@ -21,7 +22,8 @@ import pandas as pd
 
 def worker(platform, topic, creds, limit=15):
     """ Función wrapper para el proceso paralelo """
-    print(f"--- Iniciando Worker: {platform} (Meta: {limit}) ---")
+    start_time = datetime.now().strftime("%H:%M:%S")
+    print(f"[{start_time}] --- Iniciando Worker: {platform} (Meta: {limit}) ---")
     data = []
     
     if platform == "facebook":
@@ -41,15 +43,23 @@ def worker(platform, topic, creds, limit=15):
 
 if __name__ == "__main__":
     # 1. Obtener TEMA
-    if config.DEFAULT_TOPIC:
-        topic = config.DEFAULT_TOPIC
-        print(f"[Config] Usando tema definido: {topic}")
+    default_t = config.DEFAULT_TOPIC if config.DEFAULT_TOPIC else ""
+    prompt_text = f"Introduce el tema a investigar [Enter para '{default_t}']: " if default_t else "Introduce el tema a investigar: "
+    
+    topic_input = input(prompt_text).strip()
+    
+    if topic_input:
+        topic = topic_input
+    elif default_t:
+        topic = default_t
+        print(f"[Config] Usando tema por defecto: {topic}")
     else:
-        topic = input("Introduce el tema a investigar: ")
+        print("Error: Debes introducir un tema.")
+        exit()
 
     # 1b. Obtener CANTIDAD DE POSTS
     try:
-        limit_str = input("Introduce la cantidad de posts por plataforma [Default=15]: ")
+        limit_str = input("Introduce la cantidad de posts por plataforma [Default=10]: ")
         if not limit_str.strip():
             limit = 10
         else:
@@ -67,11 +77,16 @@ if __name__ == "__main__":
     else:
         pass # Input manual... omitido por brevedad
     
-    # 3. Configurar LINKEDIN
+    # 3. Configurar LINKEDIN/TWITTER
     if config.LINKEDIN_EMAIL and config.LINKEDIN_PASSWORD:
         CREDENTIALS["linkedin"]["email"] = config.LINKEDIN_EMAIL
         CREDENTIALS["linkedin"]["password"] = config.LINKEDIN_PASSWORD
         print(f"[Config] Credenciales LinkedIn cargadas.")
+
+    if config.X_USER:
+        CREDENTIALS["twitter"]["username"] = config.X_USER
+        CREDENTIALS["twitter"]["password"] = config.X_PASSWORD
+        print(f"[Config] Credenciales Twitter cargadas.")
     
     print("\n[Orquestador] Iniciando extracción PARALELA...")
     
@@ -129,3 +144,10 @@ if __name__ == "__main__":
             print(f"[Export] Datos exportados también a {excel_filename} y {csv_filename}")
         except Exception as e:
             print(f"[Export Error] No se pudo exportar a Excel/CSV: {e}")
+
+    # 4. Ejecutar Pipeline de NLP
+    print("\n[Orquestador] Iniciando procesamiento de NLP...")
+    try:
+        nlp_pipeline.run_nlp_pipeline(topic=topic)
+    except Exception as e:
+        print(f"[NLP Error] Fallo en el pipeline de NLP: {e}")
