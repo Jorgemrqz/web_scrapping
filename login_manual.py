@@ -10,6 +10,7 @@ SITE_MAP = {
     "facebook": ("auth_profile", "https://www.facebook.com/"),
     "x": ("auth_profile_x", "https://x.com/login"),
     "linkedin": ("auth_profile_linkedin", "https://www.linkedin.com/login"),
+    "instagram": ("auth_profile_instagram", "https://www.instagram.com/accounts/login/"),
 }
 
 
