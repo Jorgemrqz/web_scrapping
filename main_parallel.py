@@ -68,21 +68,7 @@ if __name__ == "__main__":
         CREDENTIALS["linkedin"]["email"] = config.LINKEDIN_EMAIL
         CREDENTIALS["linkedin"]["password"] = config.LINKEDIN_PASSWORD
         print(f"[Config] Credenciales LinkedIn cargadas.")
-    # 3. Configurar LINKEDIN
-    if config.LINKEDIN_EMAIL and config.LINKEDIN_PASSWORD:
-        CREDENTIALS["linkedin"]["email"] = config.LINKEDIN_EMAIL
-        CREDENTIALS["linkedin"]["password"] = config.LINKEDIN_PASSWORD
-        print(f"[Config] Credenciales LinkedIn cargadas.")
-    else:
-        # Si no hay credenciales, simplemente saltamos LinkedIn
-        pass
-
-    # 4. Configurar LINKEDIN
-    if config.LINKEDIN_EMAIL:
-         CREDENTIALS["linkedin"]["email"] = config.LINKEDIN_EMAIL
-         CREDENTIALS["linkedin"]["password"] = config.LINKEDIN_PASSWORD
-         print(f"[Config] Credenciales LinkedIn cargadas para: {config.LINKEDIN_EMAIL}")
-
+    
     print("\n[Orquestador] Iniciando extracción PARALELA...")
     
     # Crear procesos
@@ -93,15 +79,12 @@ if __name__ == "__main__":
     # Tarea Facebook
     tasks.append(pool.apply_async(worker, ("facebook", topic, CREDENTIALS["facebook"], limit)))
     
-    # Tarea LinkedIn
-    if CREDENTIALS["linkedin"]["email"]:
-         tasks.append(pool.apply_async(worker, ("linkedin", topic, CREDENTIALS["linkedin"])))
-    
     # Tarea Twitter
     if CREDENTIALS["twitter"]["username"]:
         tasks.append(pool.apply_async(worker, ("twitter", topic, CREDENTIALS["twitter"], limit)))
 
     # Tarea LinkedIn
+    # Se añade siempre, el worker decide si tiene credenciales o intenta con cookies
     tasks.append(pool.apply_async(worker, ("linkedin", topic, CREDENTIALS["linkedin"], limit)))
     
     # Recolectar resultados
