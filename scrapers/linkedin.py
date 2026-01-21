@@ -1,196 +1,234 @@
-from playwright.sync_api import sync_playwright
+import os
 import time
 import random
-import os
+from playwright.sync_api import sync_playwright
 
-def scrape_linkedin(topic, email, password):
-    print(f"[LinkedIn] Iniciando extracción para el tema: {topic}")
-    
-    # Directorio para guardar sesión (cookies, etc.) al igual que en FB
-    user_data_dir = "auth_profile_linkedin"
-    
-    # Resultados
+def human_delay(min_s=2, max_s=5):
+    time.sleep(random.uniform(min_s, max_s))
+
+def scrape_linkedin(topic, email, password, target_count=10):
     results = []
+    print(f"[LinkedIn DEBUG] Iniciando hilo DEFINITIVO (v3.0 - JS FORCE) para: {topic} | Objetivo: {target_count}")
     
-    # Argumentos para evitar detección (similares a FB)
-    args_list = [
-        "--disable-blink-features=AutomationControlled",
-        "--start-maximized",
-        "--disable-infobars",
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-accelerated-2d-canvas",
-        "--disable-gpu",
-    ]
+    user_data_dir = os.path.join(os.getcwd(), "auth_profile_linkedin")
+    
+    # User Agent de Windows
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
     with sync_playwright() as p:
+        print(f"[LinkedIn] Usando perfil en: {user_data_dir}")
+        
+        args_list = [
+            "--disable-notifications",
+            "--disable-blink-features=AutomationControlled", 
+            "--start-maximized",
+            "--no-sandbox",
+            "--disable-gpu"
+        ]
+        
         try:
-            # Usamos contexto persistente
             browser = p.chromium.launch_persistent_context(
                 user_data_dir,
-                headless=False, # LinkedIn requiere ver para creer (y resolver captchas)
+                headless=False,
                 args=args_list,
-                viewport=None,
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                user_agent=user_agent,
+                viewport=None
             )
-        except Exception as e:
-            print(f"[LinkedIn] Error lanzando navegador: {e}")
+        except Exception as launch_error:
+            print(f"[LinkedIn] Error lanzando navegador: {launch_error}")
             return []
+        
+        if len(browser.pages) > 0:
+            page = browser.pages[0]
+        else:
+            page = browser.new_page()
             
-        try:
-            page = browser.pages[0] if browser.pages else browser.new_page()
-            
-            # 1. Navegación inicial y Login
-            print("[LinkedIn] Entrando a LinkedIn...")
-            page.goto("https://www.linkedin.com/")
-            time.sleep(random.uniform(4, 7))
-            
-            # Verificar si ya estamos logueados (buscando la barra de búsqueda global)
-            if page.locator("input[placeholder*='Buscar']").count() > 0 or "feed" in page.url:
-                print("[LinkedIn] Sesión detectada. Saltando login.")
-            else:
-                # Intentar login
-                if page.locator("#session_key").count() > 0:
-                    print("[LinkedIn] Introduciendo credenciales...")
-                    page.fill("#session_key", email)
-                    time.sleep(1)
-                    page.fill("#session_password", password)
-                    time.sleep(1)
-                    page.click("button[type='submit']")
-                    print("[LinkedIn] Login enviado. Esperando carga...")
-                    time.sleep(10) # Espera larga para posibles verificaciones/captchas
-                    
-                    # Chequeo rápido de si pide PIN o Captcha
-                    if "challenge" in page.url:
-                        print("[LinkedIn] ! SE REQUIERE VERIFICACIÓN MANUAL (Captcha/PIN) !")
-                        print("[LinkedIn] Tienes 30 segundos para resolverlo en la ventana abierta...")
-                        time.sleep(30)
-            
-            # 2. Búsqueda de contenido
-            print(f"[LinkedIn] Buscando publicaciones sobre: '{topic}'...")
-            query = topic.replace(" ", "%20")
-            # Buscar "Publicaciones" (Content) filtrado por fecha si se quisiera, aquí general
-            search_url = f"https://www.linkedin.com/search/results/content/?keywords={query}"
-            
-            page.goto(search_url)
-            time.sleep(5)
-            
-            # 3. Scroll y Recolección
-            TARGET_POSTS = 10
-            extracted_posts = 0
-            
-            print("[LinkedIn] Haciendo scroll para cargar resultados...")
-            for _ in range(3):
-                page.mouse.wheel(0, 3000)
-                time.sleep(3)
-                
-            # Selectores de posts (LinkedIn cambia clases dinámicamente, usaremos atributos estables si es posible)
-            # Contenedor principal de cada update: div.update-components-actor es el header
-            # El contenedor del post suele tener data-urn="..."
-            
-            container_selector = "li.reusable-search__result-container"
-            posts = page.locator(container_selector)
-            count = posts.count()
-            print(f"[LinkedIn] Encontrados {count} posts visibles.")
-            
-            for i in range(min(count, TARGET_POSTS)):
-                print(f"\n[LinkedIn] --- Procesando Post {i+1} ---")
-                post = posts.nth(i)
-                post.scroll_into_view_if_needed()
-                time.sleep(1)
-                
-                # Extraer Autor
-                try:
-                     # Usamos selectores genéricos visuales
-                     author_el = post.locator("span.update-components-actor__title span.visually-hidden").first
-                     if author_el.count() == 0:
-                         # Intento alternativo
-                         author_el = post.locator("span[dir='ltr']").first
-                     
-                     author = author_el.inner_text().strip() if author_el.count() > 0 else "Desconocido"
-                except:
-                     author = "Error Autor"
-                
-                # Extraer Texto del Post
-                try:
-                    # El texto suele estar en un span class="break-words"
-                    text_el = post.locator("div.update-components-text span.break-words span[dir='ltr']").first
-                    content = text_el.inner_text().strip() if text_el.count() > 0 else ""
-                except:
-                    content = ""
-                    
-                # Si no hay contenido visible, quizás hay que dar a "ver más"
-                if not content:
-                     try:
-                         see_more = post.locator("button.update-components-text__see-more").first
-                         if see_more.count() > 0:
-                             see_more.click()
-                             time.sleep(1)
-                             text_el = post.locator("div.update-components-text span[dir='ltr']").first
-                             content = text_el.inner_text().strip()
-                     except:
-                         pass
+        page.set_default_timeout(60000)
 
-                # Guardar Post
-                if content:
-                    print(f"  [Post] Autor: {author} | Texto: {content[:30]}...")
-                    results.append({
-                        "source": "LinkedIn",
-                        "type": "post",
-                        "author": author,
-                        "content": content
-                    })
-                
-                # Extraer Comentarios (Solo si los hay visibles o botón)
-                # LinkedIn requiere clic en "Comentarios"
+        try:
+            # 1. Navegación / Login
+            print("[LinkedIn] Entrando al feed...")
+            try:
+                page.goto("https://www.linkedin.com/feed/", timeout=60000, wait_until="commit")
+                page.wait_for_timeout(3000)
+            except Exception as e:
+                print(f"[LinkedIn] Aviso cargando feed: {e}")
+
+            human_delay(2, 4)
+            
+            # Verificación de login
+            if "login" in page.url or "guest" in page.url or "people/urn" in page.url:
+                print("[LinkedIn] ALERTA: Posible login requerido.")
                 try:
-                    # Botón "Comentar" o contador de comentarios
-                    # button[aria-label*="comentar"]
-                    # Pero en resultados de búsqueda, a veces NO deja ver comentarios sin entrar al post.
-                    # En la vista de lista "Content", los posts suelen ser interactivos.
-                    
-                    # Intentamos ver si hay botón de comentarios
-                    comment_btn = post.locator("button[aria-label*='comentario']").first
-                    if comment_btn.count() > 0:
-                        comment_btn.click()
-                        time.sleep(2)
-                        
-                        # Ahora buscamos los comentarios cargados
-                        # class comments-comment-item
-                        comments = post.locator("article.comments-comment-item")
-                        c_count = comments.count()
-                        if c_count > 0:
-                            print(f"  [Comentarios] Encontrados {c_count}.")
-                            for j in range(min(c_count, 5)): # Max 5 comentarios por post
-                                c_item = comments.nth(j)
-                                try:
-                                    c_auth_el = c_item.locator("span.comments-post-meta__name-text").first
-                                    c_auth = c_auth_el.inner_text().strip() if c_auth_el.count() > 0 else "Anónimo"
-                                except:
-                                    c_auth = "Anónimo"
-                                
-                                try:
-                                    c_text_el = c_item.locator("div.comments-comment-item__main-content").first
-                                    c_text = c_text_el.inner_text().strip() if c_text_el.count() > 0 else ""
-                                except:
-                                    c_text = ""
-                                
-                                if c_text:
-                                    results.append({
-                                        "source": "LinkedIn",
-                                        "type": "comment",
-                                        "author": c_auth,
-                                        "content": c_text
-                                    })
-                except Exception as e:
-                    # print(f"  [Debug] No se pudieron extraer comentarios: {e}")
+                    if email and password and page.locator("#username").is_visible():
+                        print("[LinkedIn] Rellenando credenciales...")
+                        page.fill("#username", email)
+                        human_delay(1, 2)
+                        page.fill("#password", password)
+                        human_delay(1, 2)
+                        page.click("button[type='submit']")
+                        page.wait_for_timeout(5000)
+                except:
                     pass
             
-            print(f"[LinkedIn] Finalizado. {len(results)} elementos extraídos.")
+            # 2. Búsqueda
+            print(f"[LinkedIn] Buscando: '{topic}'...")
+            search_url = f"https://www.linkedin.com/search/results/content/?keywords={topic}&origin=GLOBAL_SEARCH_HEADER"
+            
+            try:
+                page.goto(search_url, timeout=60000, wait_until="commit")
+                print("[LinkedIn] Esperando carga de resultados...")
+                # Espera fija para asegurar carga de JS
+                time.sleep(5)
+                
+                # Espera fija para asegurar carga de JS
+                time.sleep(5)
+                
+                # (Debug snapshot removido para producción)
+
+                
+            except Exception as e:
+                print(f"[LinkedIn] Error navegando: {e}")
+                
+            human_delay(2, 4)
+            
+            print(f"[LinkedIn] Iniciando Loop JS. Meta: {target_count}")
+            
+            # Variables de control
+            extracted_count = 0
+            scroll_attempts = 0
+            MAX_SCROLLS = target_count * 3
+            consecutive_zero_results = 0
+
+            while extracted_count < target_count and scroll_attempts < MAX_SCROLLS:
+                
+                # SCRIPT JS DE EXTRACCIÓN Y SCROLL
+                js_script = """
+                () => {
+                    const data = [];
+                    
+                    // ESTRATEGIA DE SELECTORES ROBUSTOS (DATA ATTRIBUTES)
+                    // Las clases cambian (ej: _918fcd8d), pero los data-view-name suelen ser estables.
+                    const chunks = document.querySelectorAll('div[data-view-name="feed-full-update"], [role="listitem"], div.feed-shared-update-v2, div.occludable-update, div.artdeco-card');
+                    
+                    console.log("[JS Debug] Found " + chunks.length + " potential chunks");
+
+                    chunks.forEach(el => {
+                        // Ignorar elementos ocultos/vacios
+                        if (el.innerText.length < 5) return;
+
+                        let text = "";
+                        
+                        // Selector de texto prioritario: data-testid="expandable-text-box" (visto en dump)
+                        const textNode = el.querySelector('[data-testid="expandable-text-box"]');
+                        if (textNode) {
+                            text = textNode.innerText;
+                        } else {
+                            // Fallbacks
+                            const specificDiv = el.querySelector('.update-components-text, .feed-shared-text, .comments-comment-item__main-content, .break-words, span[dir="ltr"]');
+                            if (specificDiv) {
+                                text = specificDiv.innerText;
+                            } else {
+                                text = el.innerText;
+                            }
+                        }
+                        
+                        
+                        if (!text) return;
+                        text = text.trim();
+                        
+                        // LOG INTENSIVE DEBUGGING
+                        // console.log("Text found: " + text.substring(0, 50));
+
+                        // Filtros básicos JS relaxados para debug
+                        if (text.length < 5) return; 
+                        
+                        // Filtros de UI/Basura
+                        if (text.toLowerCase().includes("descriptions off")) return;
+                        if (text.toLowerCase().includes("subtitles")) return;
+                        if (text === "default, selected") return;
+
+                        // Autor
+                        let author = "Desconocido";
+                        const authLink = el.querySelector('.app-aware-link, .comments-comment-meta__description-title, .update-components-actor__name, .actor-name');
+                        if (authLink) {
+                            try {
+                                author = authLink.innerText.split('\\n')[0].trim();
+                            } catch(e) {}
+                        }
+                        
+                        // Scroll interno
+                        el.scrollIntoView({behavior: "smooth", block: "center"});
+
+                        data.push({
+                            author: author,
+                            content: text,
+                        });
+                    });
+                    
+                    // INTENTO DE SCROLL ROBUSTO
+                    window.scrollBy(0, 1000);
+                    
+                    // Si window scroll no funciona, intenta buscar el container de resultados y scrollearlo
+                    const searchContainer = document.querySelector('.search-results-container, .scaffold-layout__main');
+                    if (searchContainer) {
+                         searchContainer.scrollBy(0, 1000);
+                    }
+
+                    return { items: data, docHeight: document.body.scrollHeight };
+                }
+                """
+                
+                try:
+                    # Ejecutar JS
+                    result_obj = page.evaluate(js_script)
+                    candidates = result_obj.get("items", [])
+                    
+                    print(f"[LinkedIn DEBUG] Scroll {scroll_attempts}: JS vio {len(candidates)} items.")
+                    
+                    added_in_chunk = 0
+                    for c in candidates:
+                        if extracted_count >= target_count:
+                            break
+                        
+                        clean_text = c['content'].replace("\n", " | ")
+                        preview = clean_text[:80] + "..." if len(clean_text) > 80 else clean_text
+                        
+                        if not any(r['content'] == clean_text for r in results):
+                           results.append({
+                               "source": "LinkedIn",
+                               "type": "post",
+                               "author": c['author'],
+                               "content": clean_text,
+                               "urn": f"lid_{random.randint(100000,999999)}"
+                           })
+                           extracted_count += 1
+                           added_in_chunk += 1
+                           print(f"   -> [NUEVO] {c['author']}: {preview}")
+                    
+                    if added_in_chunk == 0:
+                        consecutive_zero_results += 1
+                        print("   (Sin nuevos posts...)")
+                    else:
+                        consecutive_zero_results = 0
+
+                except Exception as e:
+                    print(f"[LinkedIn] Error en evaluate JS: {e}")
+
+                if extracted_count >= target_count:
+                    break
+                
+                # Scroll EXTERNO para asegurar (usando window scroll además del scrollIntoView interno)
+                print("[LinkedIn] Forzando Scroll JS...")
+                page.evaluate("window.scrollBy(0, 800);")
+                time.sleep(3)
+                
+                scroll_attempts += 1
+            
+            print(f"[LinkedIn] Finalizado. Total: {len(results)}")
             
         except Exception as e:
-            print(f"[LinkedIn] Error fatal: {e}")
+            print(f"[LinkedIn] Error FATAL Global: {e}")
         finally:
             try:
                 browser.close()

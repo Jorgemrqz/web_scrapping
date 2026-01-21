@@ -5,9 +5,9 @@ import random
 
 import re
 
-def scrape_facebook(topic, email, password):
+def scrape_facebook(topic, email, password, target_count=10):
     results = []
-    print(f"[Facebook] Iniciando hilo para: {topic}")
+    print(f"[Facebook] Iniciando hilo para: {topic} | Meta: {target_count}")
     
     # Ruta para guardar el perfil de usuario (cookies, cache, etc)
     user_data_dir = os.path.join(os.getcwd(), "auth_profile")
@@ -145,7 +145,7 @@ def scrape_facebook(topic, email, password):
                  posts = page.locator('div[data-ad-preview="message"]').locator("..").locator("..").locator("..")
             
             # === Scroll Infinito Controlado ===
-            TARGET_POSTS = 25
+            TARGET_POSTS = target_count
             print(f"[Facebook] Objetivo: Obtener al menos {TARGET_POSTS} posts...")
             
             scroll_attempts = 0
