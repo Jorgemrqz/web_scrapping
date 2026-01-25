@@ -398,9 +398,6 @@ def scrape_facebook(topic, email, password, target_count=10):
                         clean_text = c_text.replace("\n", " ").strip()
                         
                         # --- DEBUG EXTRA ---
-                        clean_text = c_text.replace("\n", " ").strip()
-                        
-                        # --- DEBUG EXTRA ---
                         # print(f"  [Debug] Comentario {i}: Autor='{author}' | Texto='{clean_text[:30]}...'")
                         # -------------------
 
