@@ -66,7 +66,7 @@ def analyze_sentiment(client, text):
                         "content": prompt,
                     }
                 ],
-                model="llama-3.3-70b-versatile", # Modelo actualizado
+                model="llama-3.1-8b-instant", # Modelo ultra rápido actual
                 temperature=0,
                 max_tokens=10,
             )
@@ -130,13 +130,6 @@ def run_sentiment_analysis():
         post['sentiment'] = sentiment
         results.append(post)
         
-        # Pequeño delay de 1.5s para no saturar el RPM (Rate Per Minute)
-        # Groq permite unas 30 RPM en free tier para modelos grandes.
-        time.sleep(2) 
-        
-        # Guardado parcial cada 50 items
-        if i > 0 and i % 50 == 0:
-             pd.DataFrame(results).to_csv(os.path.join(data_dir, "sentiment_results_partial_groq.csv"), index=False)
 
     # 4. Guardar resultados finales
     output_file = os.path.join(data_dir, "sentiment_analysis_groq.csv")
