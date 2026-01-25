@@ -6,3 +6,5 @@ matplotlib
 wordcloud
 scikit-learn
 openpyxl
+google-generativeai
+groq
