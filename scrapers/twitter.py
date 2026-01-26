@@ -213,70 +213,82 @@ def scrape_twitter(topic: str, username: str, password: str, target_count: int =
             page.goto(search_url, wait_until="domcontentloaded")
             human_delay(2.0)
 
-            tweets = page.locator('article[data-testid="tweet"]')
             seen_urls = set()
             scrolls = 0
-            TARGET_TWEETS = target_count
-            while tweets.count() < TARGET_TWEETS and scrolls < MAX_SCROLLS:
-                page.mouse.wheel(0, 2000)
-                human_delay(1.3)
+            
+            # --- MODIFICADO: Contar Comentarios (Respuestas), no solo Posts ---
+            collected_comments = 0
+            
+            # Bucle infinito hasta cumplir meta de comentarios
+            while collected_comments < target_count and scrolls < 50:
+                print(f"[X] Bucle principal: {collected_comments}/{target_count} comentarios. Scroll {scrolls}...")
+                
+                # 1. Identificar Tweets en pantalla
                 tweets = page.locator('article[data-testid="tweet"]')
+                count = tweets.count()
+                
+                # Iterar sobre tweets visibles
+                for idx in range(count):
+                    if collected_comments >= target_count: break
+                    
+                    try:
+                        article = tweets.nth(idx)
+                        article.scroll_into_view_if_needed()
+                        
+                        permalink = extract_permalink(article)
+                        if not permalink or permalink in seen_urls:
+                            continue
+                        seen_urls.add(permalink)
+                        
+                        # Scrape Conversación (Aquí es donde sacamos los comentarios/respuestas)
+                        human_delay(0.5)
+                        convo_data = scrape_conversation(context, permalink)
+                        
+                        # Guardar Post Original (Opcional, pero útil para contexto)
+                        if convo_data["post"]:
+                            results.append(convo_data["post"])
+                        
+                        # Guardar Respuestas (Estos son los "comentarios")
+                        replies = convo_data["replies"]
+                        if replies:
+                            results.extend(replies)
+                            collected_comments += len(replies)
+                            print(f"   > +{len(replies)} respuestas extraídas. Total: {collected_comments}")
+                            
+                    except Exception as e:
+                        # print(f"Err tweet {idx}: {e}")
+                        pass
+                
+                if collected_comments >= target_count: break
+                
+                # Scroll para ver más tweets
+                page.mouse.wheel(0, 2500)
+                human_delay(2.0)
                 scrolls += 1
-
-            total = min(tweets.count(), TARGET_TWEETS)
-            print(f"[X] Procesando {total} tweets visibles.")
-
-            for idx in range(total):
-                article = tweets.nth(idx)
-                try:
-                    article.scroll_into_view_if_needed()
-                except Exception:
-                    pass
-                human_delay()
-
-                content = extract_text(article)
-                if not content:
-                    continue
-
-                handle = extract_handle(article)
-                timestamp = extract_timestamp(article)
-                permalink = extract_permalink(article)
-                if not permalink or permalink in seen_urls:
-                    continue
-                seen_urls.add(permalink)
-
-                convo_data = scrape_conversation(context, permalink)
-                if convo_data["post"]:
-                    results.append(convo_data["post"])
-                else:
-                    results.append({
-                        "source": "X",
-                        "type": "post",
-                        "url": permalink,
-                        "author": handle,
-                        "content": content,
-                        "datetime": timestamp,
-                        "parent_url": permalink,
-                    })
-
-                for reply in convo_data["replies"]:
-                    results.append(reply)
+            
+            print(f"[X] Finalizado. {len(results)} items totales ({collected_comments} respuestas).")
 
         except TimeoutError:
-            print("[X] Timeout esperando resultados de búsqueda.")
+            print("[X] Timeout durante la carga inicial o búsqueda. Reintentando refresh...")
+            try:
+                page.reload()
+                page.wait_for_timeout(5000)
+            except: pass
+            
         except Exception as exc:
-            print(f"[X] Error inesperado: {exc}")
+            print(f"[X] Error inesperado en flujo principal: {exc}")
         finally:
             if config.X_REMOTE_DEBUGGING_URL:
                 try:
-                    if browser:
-                        browser.close()
-                except Exception:
-                    pass
+                    if browser: browser.close()
+                except: pass
             else:
-                try:
-                    context.close()
-                except Exception:
-                    pass
+                 try: 
+                    if context: context.close()
+                 except: pass
 
+    # Chequeo final
+    if not results:
+        print("[X] Advertencia: No se extrajeron resultados. Verifica login o selectores.")
+        
     return results

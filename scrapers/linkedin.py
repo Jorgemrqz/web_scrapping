@@ -44,9 +44,12 @@ def scrape_linkedin(topic, email, password, target_count=10):
             processed_ids = set()
             scroll_attempts_without_new = 0
             
-            while len(results) < target_count and scroll_attempts_without_new < 8:
+            # Counter exclusivo de comentarios
+            total_comments_extracted = 0
+            
+            while total_comments_extracted < target_count and scroll_attempts_without_new < 15:
                 
-                print(f"[LinkedIn] Escaneando... (Rec: {len(results)})")
+                print(f"[LinkedIn] Escaneando... (Comentarios: {total_comments_extracted}/{target_count})")
                 
                 found_posts = []
                 # Filtro regex estricto para boton acción
@@ -69,7 +72,7 @@ def scrape_linkedin(topic, email, password, target_count=10):
 
                 new_in_pass = 0
                 for post_item, action_btn in found_posts:
-                    if len(results) >= target_count: break
+                    if total_comments_extracted >= target_count: break
                     try:
                         post_item.scroll_into_view_if_needed()
                         human_delay(0.5, 1)
@@ -100,56 +103,106 @@ def scrape_linkedin(topic, email, password, target_count=10):
                         new_in_pass += 1
                         print(f"[LinkedIn] > Post: {author[:20]}")
 
-                        # -- CLIC AL BOTÓN DE ACCIÓN 'COMENTAR' --
-                        print(f"   [LinkedIn] Clic botón Comentar (Diff)...")
+                        # -- NUEVA ESTRATEGIA INTEGRADA --
+                        
+                        # 1. Intentar abrir comentarios (Click en "X comentarios" o "Comentar")
+                        comments_opened = False
                         try:
-                            action_btn.click(force=True)
-                            time.sleep(3) # Esperar despliegue (IMPORTANTE)
+                            # Buscar botón tipo "5 comentarios"
+                            count_btn = post_item.locator('button, a, span').filter(has_text=re.compile(r"\d+\s+comentarios?", re.IGNORECASE)).first
+                            if count_btn.count() > 0 and count_btn.is_visible():
+                                count_btn.click(force=True)
+                                comments_opened = True
+                                time.sleep(3)
+                            else:
+                                # Fallback al botón de acción "Comentar"
+                                if action_btn.is_visible():
+                                    action_btn.click(force=True)
+                                    comments_opened = True
+                                    time.sleep(3)
+                        except: pass
+                        
+                        # 2. Intentar cargar más comentarios si hay botón "Ver más comentarios"
+                        try:
+                            more_btns = post_item.locator('button').filter(has_text=re.compile(r"ver más comentarios|load more comments", re.IGNORECASE))
+                            if more_btns.count() > 0 and more_btns.first.is_visible():
+                                more_btns.first.click(force=True)
+                                time.sleep(2)
                         except: pass
 
-                        # --- CAPTURA TEXTO DESPUES (MOMENTO B) ---
-                        txt_after = post_item.inner_text()
+                        # 3. Extraer utilizando selectores de comentarios de LinkedIn
+                        # Clases típicas: .comments_comment-item, .comments-comments-list__comment-item
+                        # O buscar artículos dentro de la sección de comentarios
                         
-                        # --- ESTRATEGIA DIFERENCIA DE TEXTO ---
-                        # Si B > A, lo nuevo son comentarios
+                        # Buscamos contendores de comentarios DENTRO del post_item para no mezclar
+                        # Selectores heurísticos basados en estructura actual (2025/2026 estimación)
                         
-                        lines_A = set([l.strip() for l in txt_before.split('\n') if len(l.strip())>0])
-                        lines_B = [l.strip() for l in txt_after.split('\n') if len(l.strip())>0]
+                        possible_comments = post_item.locator('article.comments-comment-item, div.comments-comment-item, article.comments-comments-list__comment-item')
                         
-                        c_extracted = 0
-                        bad_tokens = ["Publicación en el feed", "Recomendar", "Comentar", "Compartir", "Enviar", author, "seguidores", "ver más", "Responder"]
+                        # Si selectores de clase fallan, buscar por estructura general (bloques de texto y autor)
+                        if possible_comments.count() == 0:
+                             # Buscar artículos genéricos dentro del post que NO sean el post mismo
+                             possible_comments = post_item.locator('article').filter(has_text=re.compile(r"Recomendar|Responder", re.IGNORECASE))
                         
-                        for line in lines_B:
-                            if line not in lines_A:
-                                # Es texto NUEVO -> Posible comentario
-                                c_txt = line
-                                if len(c_txt) > 3 and len(c_txt) < 600:
-                                    # Filtros
-                                    if author in c_txt: continue
-                                    if post_clean[:20] in c_txt: continue
+                        c_found_count = possible_comments.count()
+                        
+                        # Procesar candidatos
+                        c_extracted_post = 0
+                        for j in range(c_found_count):
+                            if total_comments_extracted >= target_count: break
+                            if c_extracted_post >= 20: break # Max por post
+                            
+                            try:
+                                comm_el = possible_comments.nth(j)
+                                comm_text = comm_el.inner_text().strip()
+                                
+                                # Limpieza básica
+                                # Separar autor de contenido. Suele ser: "Autor\nCargo\nTexto..."
+                                lines = [l.strip() for l in comm_text.split('\n') if len(l.strip()) > 1]
+                                
+                                c_author = "Usuario LinkedIn"
+                                c_content = ""
+                                
+                                # Heurística simple: Linea 1 = Autor, Última linea larga = Contenido
+                                if len(lines) >= 2:
+                                    c_author = lines[0]
+                                    # Juntar resto excluyendo palabras clave de UI "Recomendar Responder..."
+                                    clean_lines = []
+                                    start_content = False
+                                    for line in lines[1:]:
+                                        # Filtro de ruido UI
+                                        if any(x in line for x in ["Recomendar", "Responder", "Ver traducción", "hace", "meses", "días", "horas", "editado"]):
+                                            continue
+                                        clean_lines.append(line)
+                                    c_content = " ".join(clean_lines)
+                                else:
+                                    c_content = comm_text
                                     
-                                    is_garbage = False
-                                    for bad in bad_tokens:
-                                        if bad.lower() in c_txt.lower(): is_garbage=True
-                                    if is_garbage: continue
-                                    
+                                if len(c_content) > 3 and c_content != post_clean:
+                                    # Verificar duplicados locales
                                     is_dup = False
                                     for r in results[-10:]:
-                                        if r['content'] == (c_txt.replace("\n", " ")): is_dup = True
+                                        if r['content'] == c_content: is_dup = True
                                     
                                     if not is_dup:
                                         results.append({
                                             "source": "LinkedIn", "type": "comment",
-                                            "author": "Usuario LinkedIn",
-                                            "content": c_txt.replace("\n", " ")
+                                            "author": c_author[:50],
+                                            "content": c_content
                                         })
-                                        c_extracted += 1
-                                        if c_extracted >= 5: break
-                        
-                        if c_extracted > 0:
-                            print(f"   [LinkedIn] -> {c_extracted} comentarios extraídos (Diff Strategy).")
+                                        c_extracted_post += 1
+                                        total_comments_extracted += 1
+                                        
+                            except: pass
+                            
+                        if c_extracted_post > 0:
+                            print(f"   [LinkedIn] + {c_extracted_post} comentarios extraídos.")
+                        else:
+                            pass # print("   [LinkedIn] (Sin comentarios extraíbles)")
 
-                    except Exception: pass
+                    except Exception as e:
+                         # print(f"Err Post: {e}")
+                         pass
                         
                 if new_in_pass == 0:
                     scroll_attempts_without_new += 1
@@ -157,7 +210,7 @@ def scrape_linkedin(topic, email, password, target_count=10):
                     time.sleep(2)
                 else:
                     scroll_attempts_without_new = 0
-                    page.mouse.wheel(0, 500)
+                    page.mouse.wheel(0, 600)
                     time.sleep(1)
 
                 try:

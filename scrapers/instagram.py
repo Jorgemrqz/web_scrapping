@@ -192,11 +192,17 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
                 pass
 
         # Recolectar URLs de posts
+        # MODIFICADO: Buscamos URLs hasta tener suficientes PARA sacar comentarios.
+        # Estimamos 5 comentarios por post para no scrollear eternamente, pero el objetivo final es comentarios.
+        
         seen = set()
         scrolls = 0
-        max_scrolls = max(25, target_count * 3)
+        estimated_posts_needed = max(10, target_count) # Mejor sobrar que faltar
+        max_scrolls = 60
+        
+        print(f"[instagram] Recolectando links para intentar llegar a {target_count} comentarios...")
 
-        while len(seen) < target_count and scrolls < max_scrolls:
+        while len(seen) < estimated_posts_needed and scrolls < max_scrolls:
             hrefs = page.evaluate("""() => Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href'))""")
             new_count = 0
             for href in hrefs:
@@ -206,11 +212,14 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
                         seen.add(full)
                         new_count += 1
 
-            print(f"[instagram] scroll={scrolls} nuevos_links={new_count} total_links={len(seen)}")
+            # print(f"[instagram] scroll={scrolls} links={len(seen)}")
 
-            page.mouse.wheel(0, 2200)
-            page.wait_for_timeout(2000)
+            page.mouse.wheel(0, 3000)
+            page.wait_for_timeout(1500)
             scrolls += 1
+            
+            # Si tenemos muchos links, parar early
+            if len(seen) > target_count * 1.5: break
 
         if not seen:
             _save_debug(page, hashtag, "no_links_after_scroll")
@@ -218,59 +227,56 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
             print("[instagram] No se detectaron links /p/ o /reel/ en el hashtag.")
             return []
 
-        post_urls = list(seen)[:target_count]
+        post_urls = list(seen)
+        print(f"[instagram] Se visitarán hasta {len(post_urls)} posts buscando {target_count} comentarios.")
 
-        # Visitar posts
+        # Visit posts
+        total_comments_collected = 0
+        
         for i, post_url in enumerate(post_urls, start=1):
+            if total_comments_collected >= target_count: 
+                print("[instagram] Meta de comentarios alcanzada.")
+                break
+                
             try:
-                print(f"[instagram] Visitando ({i}/{len(post_urls)}): {post_url}")
+                print(f"[instagram] ({total_comments_collected}/{target_count}) Visitando: {post_url}")
                 page.goto(post_url, wait_until="domcontentloaded")
                 page.wait_for_timeout(2500)
 
                 try:
                     page.wait_for_selector("main", timeout=15000)
-                except:
-                    pass
+                except: pass
 
-                if i == 1:
-                    _save_debug(page, hashtag, "first_post")
-
-                # Caption desde og:description
+                # Caption
                 caption = ""
                 meta = page.query_selector('meta[property="og:description"]')
                 if meta:
                     content = meta.get_attribute("content")
                     if content:
                         caption = content.strip()
-                        # intenta remover prefijo tipo "X on Instagram: ..."
                         caption = re.sub(r'^.*?:\s*', '', caption)
 
-                if not caption:
-                    continue
+                # Extraer Comentarios (Límite aumentado a 50 por post)
+                post_comments = extract_comments(page, caption=caption, max_comments=50)
 
-                post_comments = extract_comments(page, caption=caption, max_comments=8)
-
+                # Guardar Post (Solo si tiene comentarios o es relevante)
                 clean_text = caption.replace("\n", " | ").strip()
-                results.append({
-                    "source": "Instagram",
-                    "type": "post",
-                    "author": "Desconocido",
-                    "content": clean_text,
-                    "comments": post_comments, # Mantenemos por referencia
-                    "url": post_url,
-                    "urn": f"ig_{random.randint(100000, 999999)}",
-                })
-
-                # --- NUEVO: Aplanar comentarios para NLP ---
-                # Agregar los comentarios como registros independientes
-                for comment_text in post_comments:
+                if clean_text:
                     results.append({
-                        "source": "Instagram",
-                        "type": "comment",
-                        "author": "Desconocido",
-                        "content": comment_text,
+                        "source": "Instagram", "type": "post",
+                        "author": "Desconocido", "content": clean_text,
+                        "url": post_url
+                    })
+
+                # Guardar Comentarios
+                for comment_text in post_comments:
+                    if total_comments_collected >= target_count: break
+                    results.append({
+                        "source": "Instagram", "type": "comment",
+                        "author": "Desconocido", "content": comment_text,
                         "parent_url": post_url
                     })
+                    total_comments_collected += 1
 
                 human_delay()
 
@@ -279,5 +285,5 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
 
         ctx.close()
 
-    print(f"[instagram] Finalizado. Extraje {len(results)} posts para #{hashtag}")
+    print(f"[instagram] Finalizado. Extraje {total_comments_collected} comentarios.")
     return results
