@@ -231,19 +231,40 @@ def scrape_facebook(topic, email, password, target_count=10):
                             text_divs = post_body.locator('div[dir="auto"]').all()
                             
                             content_parts = []
+                            seen_texts = set()
+                            
                             for div in text_divs:
                                 txt = div.inner_text().strip()
+                                
                                 # Filtros anti-ruido
                                 if (len(txt) > 3 
                                     and txt != post_author 
                                     and txt not in ["Me gusta", "Responder", "Compartir", "Ver más"]
                                     and not txt.startswith("Hace") # Fechas relativas
                                     ):
-                                    content_parts.append(txt)
+                                    
+                                    # Evitar duplicados exactos o substrings muy obvios
+                                    is_duplicate = False
+                                    for existing in content_parts:
+                                        if txt in existing or existing in txt:
+                                            # Si uno contiene al otro, nos quedamos con el más largo
+                                            if len(txt) > len(existing):
+                                                content_parts.remove(existing)
+                                                content_parts.append(txt)
+                                            is_duplicate = True
+                                            break
+                                    
+                                    if not is_duplicate and txt not in seen_texts:
+                                        content_parts.append(txt)
+                                        seen_texts.add(txt)
                             
                             if content_parts:
                                 # Tomamos el más largo o unimos
                                 post_content = " | ".join(content_parts)
+                            
+                            # Limpieza Definitiva del Post Content
+                            post_content = post_content.replace("\n", " | ").replace("\r", "")
+                            post_content = re.sub(r'\s+', ' ', post_content).strip()
 
                             print(f"[Post] Autor: '{post_author}' | Texto: {post_content[:40]}...")
                             
@@ -367,7 +388,7 @@ def scrape_facebook(topic, email, password, target_count=10):
                                 
                                 # LIMPIEZA DE AUTOR (Quitar fechas relativas que a veces se pegan)
                                 # Ej: "Juan Perez Hace 2 horas" -> "Juan Perez"
-                                c_author = re.split(r'\s+Hace\s+', c_author)[0].strip()
+                                c_author = re.split(r'\s+hace\s+', c_author, flags=re.IGNORECASE)[0].strip()
                                 
                                 # Contenido: Todo lo que no sea el autor, ni metadata
                                 clean_lines = []
@@ -387,11 +408,15 @@ def scrape_facebook(topic, email, password, target_count=10):
                                 if c_content.startswith(c_author):
                                     c_content = c_content[len(c_author):].strip()
 
+                                # QUITAR NUMEROS SUELTOS AL FINAL (Contadores de Likes)
+                                # Ej: "texto del comentario 15" -> "texto del comentario"
+                                c_content = re.sub(r'\s+\d+$', '', c_content).strip()
+
                                 if len(c_content) > 0:
                                     results.append({
                                         "post_index": posts_scraped + 1,
                                         "post_author": post_author,
-                                        "post_content": post_content,
+                                        "post_content": post_content, # Ya está limpio
                                         "comment_author": c_author,
                                         "comment_content": c_content
                                     })
