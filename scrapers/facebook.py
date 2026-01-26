@@ -149,7 +149,8 @@ def scrape_facebook(topic, email, password, target_count=10):
             # Pero necesitamos posts para sacar comentarios.
             # Estrategia: Obtener un batch inicial de posts, procesar, y si falta, scrollear más.
             
-            collected_comments_count = 0
+            posts_scraped = 0
+            collected_comments_count = 0 
             processed_posts_indices = set()
             
             scroll_attempts = 0
@@ -158,7 +159,7 @@ def scrape_facebook(topic, email, password, target_count=10):
             feed_locator = None 
             
             # Bucle Principal de Recolección
-            while collected_comments_count < target_count and scroll_attempts < max_scrolls_total:
+            while posts_scraped < target_count and scroll_attempts < max_scrolls_total:
                 
                 # 1. Identificar posts actuales
                 feed = page.locator('div[role="feed"]')
@@ -172,13 +173,13 @@ def scrape_facebook(topic, email, password, target_count=10):
                     posts = page.locator('div[role="article"]')
                 
                 current_post_count = posts.count()
-                print(f"[Facebook] Posts visibles: {current_post_count} | Comentarios recolectados: {collected_comments_count}/{target_count}")
+                print(f"[Facebook] Posts visibles: {current_post_count} | Posts Procesados: {posts_scraped}/{target_count}")
                 
                 # 2. Procesar posts nuevos
                 found_new_in_pass = False
                 
                 for i in range(current_post_count):
-                    if collected_comments_count >= target_count: 
+                    if posts_scraped >= target_count: 
                         break
                         
                     if i in processed_posts_indices:
@@ -192,13 +193,75 @@ def scrape_facebook(topic, email, password, target_count=10):
                         post_body.scroll_into_view_if_needed()
                         # time.sleep(1) 
                         
+                        # --- 0. EXTRAER INFO DEL POST (Autor y Texto) ---
+                        try:
+                            # Autor: Estrategia Mejorada
+                            post_author = "Desconocido"
+                            
+                            # 1. Buscar etiqueta Strong (muy común para nombres)
+                            author_candidates = post_body.locator('strong, h2, h3').all()
+                            for candlestick in author_candidates:
+                                t = candlestick.inner_text().strip()
+                                if len(t) > 2 and "Me gusta" not in t: # Filtro básico
+                                    post_author = t
+                                    break
+                            
+                            # 2. Si falló, buscar primer link que NO parezca fecha
+                            if post_author == "Desconocido":
+                                links = post_body.locator('div[data-ad-preview="message"] < div < div a').all() # Subir desde el mensaje
+                                if not links:
+                                     links = post_body.locator('span > a[role="link"]').all()
+                                
+                                for l in links:
+                                    txt = l.inner_text().strip()
+                                    if len(txt) > 3 and not re.search(r'\d+\s?[hm]', txt):
+                                        post_author = txt
+                                        break
+                            
+                            # LIMPIEZA DE AUTOR
+                            if post_author:
+                                # Eliminar "Seguir", "·", saltos de línea
+                                post_author = post_author.replace("\n", " ").replace("Seguir", "").replace("·", "").strip()
+                                # Si quedaron espacios dobles
+                                post_author = re.sub(r'\s+', ' ', post_author).strip()
+
+                            # Texto: Estrategia Mejorada
+                            post_content = "Sin texto / Solo media"
+                            # Buscamos bloques de texto significativos
+                            text_divs = post_body.locator('div[dir="auto"]').all()
+                            
+                            content_parts = []
+                            for div in text_divs:
+                                txt = div.inner_text().strip()
+                                # Filtros anti-ruido
+                                if (len(txt) > 3 
+                                    and txt != post_author 
+                                    and txt not in ["Me gusta", "Responder", "Compartir", "Ver más"]
+                                    and not txt.startswith("Hace") # Fechas relativas
+                                    ):
+                                    content_parts.append(txt)
+                            
+                            if content_parts:
+                                # Tomamos el más largo o unimos
+                                post_content = " | ".join(content_parts)
+
+                            print(f"[Post] Autor: '{post_author}' | Texto: {post_content[:40]}...")
+                            
+                            # NOTA: Ya no guardamos el post como fila independiente aquí.
+                            # Lo guardaremos junto con cada comentario para mantener la relación.
+
+                        except Exception as e_post:
+                             print(f"Error extrayendo info del post: {e_post}")
+                             post_author = "Error"
+                             post_content = "Error"
+
                         # --- Lógica de apertura de comentarios (Reutilizada y compactada) ---
                         clicked = False
                         
                         # Intentar subir a contenedor padre si el locator es interno
                         first_post = post_body
                         
-                        # Buscar botón comentarios
+                        # Buscar botón comentarios (Abrir modal)
                         try:
                             # Prioridad: Botón "N comentarios"
                             comm_btn = first_post.locator('div[role="button"], span[role="button"]').filter(has_text=re.compile(r"\d+\s+comentarios?", re.IGNORECASE)).first
@@ -225,70 +288,134 @@ def scrape_facebook(topic, email, password, target_count=10):
                              except: pass
                         
                         if not clicked:
-                            # Si no pudimos interactuar, saltamos
+                            # Si no pudimos interactuar, guardamos el post sin comentarios
+                            results.append({
+                                "post_index": posts_scraped + 1,
+                                "post_author": post_author,
+                                "post_content": post_content,
+                                "comment_author": "",
+                                "comment_content": ""
+                            })
+                            posts_scraped += 1
                             processed_posts_indices.add(i)
                             continue
                             
-                        time.sleep(4) # Esperar carga modal/despliegue
+                        time.sleep(2) # Esperar carga modal/despliegue (Reducido)
                         
-                        # --- Extracción ---
+                        # --- Extracción y Expansión de Comentarios ---
                         container = page
-                        # Si hay modal
                         if page.locator('div[role="dialog"]').count() > 0:
                             container = page.locator('div[role="dialog"]').last
-                            
+                        
+                        # EXPANDIR COMENTARIOS (Clicar "Ver más" repetidamente)
+                        print("   > Expandiendo comentarios (Max 5 niveles)...")
+                        for _ in range(5): # Intentar 5 veces "Ver más comentarios"
+                            try:
+                                more_btns = container.locator('span:has-text("Ver más comentarios"), span:has-text("Ver comentarios previos"), div[role="button"]:has-text("Ver más")').all()
+                                clicked_more = False
+                                for btn in more_btns:
+                                    if btn.is_visible():
+                                        btn.click(force=True)
+                                        clicked_more = True
+                                        time.sleep(1) # Reducido
+                                if not clicked_more:
+                                    # Scroll dentro del modal para activar carga perezosa
+                                    page.mouse.wheel(0, 1000)
+                                    time.sleep(1) # Reducido
+                                    break # Si no hay botones, salimos
+                            except:
+                                break
+
                         # Selectores comentarios
                         comments_loc = container.locator('div[aria-label^="Comentario de"]')
                         if comments_loc.count() == 0:
                              comments_loc = container.locator('div[role="article"]') # Genérico
                         
                         c_qty = comments_loc.count()
-                        print(f"   > Post {i}: {c_qty} candidatos.")
+                        print(f"   > Post {posts_scraped+1}: {c_qty} comentarios encontrados.")
                         
                         post_comments_added = 0
+                        # Si no hay comentarios, guardar al menos el post
+                        if c_qty == 0:
+                             results.append({
+                                "post_index": posts_scraped + 1,
+                                "post_author": post_author,
+                                "post_content": post_content,
+                                "comment_author": "",
+                                "comment_content": ""
+                            })
+                        
                         for j in range(c_qty):
-                            if collected_comments_count >= target_count: break
                             try:
                                 el = comments_loc.nth(j)
                                 raw_text = el.inner_text()
-                                # Limpieza básica para extraer contenido real
-                                # (Simplificado para velocidad, mejorable con parsing fino)
-                                lines = [l.strip() for l in raw_text.split('\n') if len(l.strip()) > 2]
-                                content = " ".join(lines)
+                                lines = [l.strip() for l in raw_text.split('\n') if len(l.strip()) > 0]
                                 
-                                if len(content) > 3 and "Comentar" not in content:
-                                    # Extraer autor si posible (primer línea suele ser autor)
-                                    author = lines[0] if lines else "Anon"
-                                    text_body = " ".join(lines[1:]) if len(lines) > 1 else content
-                                    
+                                # Extraer autor/contenido
+                                c_author = "Anon"
+                                c_content = ""
+                                
+                                # Intento por aria-label (Suele ser el más limpio "Comentario de ...")
+                                lbl = el.get_attribute("aria-label")
+                                if lbl: 
+                                    c_author = lbl.replace("Comentario de", "").strip()
+                                
+                                # Si no hay aria-label, usaremos el texto
+                                if not c_author or c_author == "Anon":
+                                     if len(lines) > 0: 
+                                         c_author = lines[0]
+                                
+                                # LIMPIEZA DE AUTOR (Quitar fechas relativas que a veces se pegan)
+                                # Ej: "Juan Perez Hace 2 horas" -> "Juan Perez"
+                                c_author = re.split(r'\s+Hace\s+', c_author)[0].strip()
+                                
+                                # Contenido: Todo lo que no sea el autor, ni metadata
+                                clean_lines = []
+                                for l in lines:
+                                    # Filtros estrictos
+                                    if (l != c_author 
+                                        and not l.startswith(c_author) # A veces el texto repite el autor
+                                        and l not in ["Responder", "Me gusta", "Ocultar", "Editar"]
+                                        and not re.match(r'^\d+\s?[hmys]$', l) # "4 h", "1 sem"
+                                        and not re.match(r'^Hace\s+', l) 
+                                        ):
+                                        clean_lines.append(l)
+                                
+                                c_content = " ".join(clean_lines)
+                                
+                                # Limpieza final de contenido (a veces el autor sigue pegado al principio)
+                                if c_content.startswith(c_author):
+                                    c_content = c_content[len(c_author):].strip()
+
+                                if len(c_content) > 0:
                                     results.append({
-                                        "source": "Facebook", "type": "comment",
-                                        "author": author, "content": text_body
+                                        "post_index": posts_scraped + 1,
+                                        "post_author": post_author,
+                                        "post_content": post_content,
+                                        "comment_author": c_author,
+                                        "comment_content": c_content
                                     })
-                                    collected_comments_count += 1
                                     post_comments_added += 1
                             except: pass
                         
-                        if post_comments_added > 0:
-                            found_new_in_pass = True
-                            
                         # Cerrar modal/post
                         page.keyboard.press("Escape")
                         time.sleep(0.5)
                         page.keyboard.press("Escape") # Doble por seguridad
                         
                     except Exception as e:
-                        # print(f"Err post {i}: {e}")
+                        print(f"Err post {i}: {e}")
                         pass
                     
+                    posts_scraped += 1
                     processed_posts_indices.add(i)
                     
                 # 3. Decidir si hacer scroll
-                if collected_comments_count < target_count:
+                if posts_scraped < target_count:
                     # Si no procesamos nada nuevo o ya acabamos los visibles
                     print("[Facebook] Scrolleando para más posts...")
                     page.mouse.wheel(0, 3000)
-                    time.sleep(4)
+                    time.sleep(2) # Reducido
                     scroll_attempts += 1
                     
                     # Chequeo anti-bucle si no carga nada nuevo
