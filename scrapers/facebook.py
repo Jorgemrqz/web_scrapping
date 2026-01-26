@@ -329,21 +329,37 @@ def scrape_facebook(topic, email, password, target_count=10):
                             container = page.locator('div[role="dialog"]').last
                         
                         # EXPANDIR COMENTARIOS (Clicar "Ver más" repetidamente)
-                        print("   > Expandiendo comentarios (Max 5 niveles)...")
-                        for _ in range(5): # Intentar 5 veces "Ver más comentarios"
+                        print("   > Expandiendo comentarios (Max 10 intentos)...")
+                        for _ in range(10): 
                             try:
+                                # Prioridad 1: Click en botones "Ver más"
                                 more_btns = container.locator('span:has-text("Ver más comentarios"), span:has-text("Ver comentarios previos"), div[role="button"]:has-text("Ver más")').all()
                                 clicked_more = False
                                 for btn in more_btns:
                                     if btn.is_visible():
-                                        btn.click(force=True)
-                                        clicked_more = True
-                                        time.sleep(1) # Reducido
+                                        try:
+                                            btn.click(force=True)
+                                            clicked_more = True
+                                            time.sleep(1.5)
+                                        except: pass
+                                
                                 if not clicked_more:
-                                    # Scroll dentro del modal para activar carga perezosa
-                                    page.mouse.wheel(0, 1000)
-                                    time.sleep(1) # Reducido
-                                    break # Si no hay botones, salimos
+                                    # Prioridad 2: Scroll agresivo para Lazy Loading
+                                    # Buscamos el último comentario visible y hacemos scroll hacia él
+                                    current_comments = container.locator('div[aria-label^="Comentario de"]')
+                                    if current_comments.count() > 0:
+                                        try:
+                                            current_comments.last.scroll_into_view_if_needed()
+                                            page.mouse.wheel(0, 500) # Un empujoncito extra
+                                            time.sleep(1.5)
+                                        except: 
+                                            page.mouse.wheel(0, 1000)
+                                    else:
+                                        page.mouse.wheel(0, 1000)
+                                        time.sleep(1)
+                                    
+                                    # Si tras el scroll no aparece botón nuevo y ya no carga más...
+                                    # (Podríamos poner condiciones de salida más listas, pero el loop de 10 termina rápido)
                             except:
                                 break
 
