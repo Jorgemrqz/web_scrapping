@@ -3,149 +3,29 @@ import os
 import re
 import time
 import random
-from datetime import datetime
 from urllib.parse import quote_plus
-
-POST_RE = re.compile(r"^/(p|reel)/[^/]+/")
 
 def human_delay(min_s=1.2, max_s=2.8):
     time.sleep(random.uniform(min_s, max_s))
 
-def clean_comment(text: str) -> str:
-    text = re.sub(r"http\S+|www\S+", "", text)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
-
-def extract_comments(page, caption: str = "", max_comments: int = 8):
-    patterns = [
-        "Ver todos los comentarios", "Ver más comentarios", "View all comments",
-        "View all", "Ver los", "Load more comments"
-    ]
-    for pat in patterns:
-        try:
-            page.get_by_text(re.compile(pat, re.IGNORECASE)).first.click(timeout=1200)
-            page.wait_for_timeout(1200)
-            break
-        except:
-            pass
-
-    try:
-        page.mouse.wheel(0, 1600)
-        page.wait_for_timeout(800)
-        page.mouse.wheel(0, 1600)
-        page.wait_for_timeout(800)
-    except:
-        pass
-
-    candidates = page.evaluate("""
-    () => {
-      const root = document.querySelector("main");
-      if (!root) return [];
-
-      const spans = Array.from(root.querySelectorAll("span"))
-        .map(s => (s.innerText || "").trim())
-        .filter(t => t.length >= 20);
-
-      const norm = spans.map(t => t.replace(/\\s+/g, " ").trim());
-
-      const seen = new Set();
-      const out = [];
-      for (const t of norm) {
-        if (!seen.has(t)) { seen.add(t); out.push(t); }
-      }
-      return out;
-    }
-    """)
-
-    bad_substrings = [
-        "me gusta", "likes", "reply", "responder", "respuestas", "replies",
-        "ver traducción", "see translation", "ver las", "view all", "view more",
-        "agrega un comentario", "add a comment",
-        "seguir", "follow"
-    ]
-
-    cleaned = []
-    cap = (caption or "").strip().lower()
-    for t in candidates:
-        tt = clean_comment(t)
-        low = tt.lower()
-
-        if any(b in low for b in bad_substrings):
-            continue
-
-        if cap and cap[:40] and cap[:40] in low:
-            continue
-
-        cleaned.append(tt)
-        if len(cleaned) >= max_comments:
-            break
-
-    return cleaned
-
-def _debug_enabled() -> bool:
-    return os.getenv("IG_DEBUG", "").strip() in ("1", "true", "TRUE", "yes", "YES")
-
-def _save_debug(page, hashtag: str, label: str):
-    if not _debug_enabled():
-        return
-    os.makedirs("data", exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe = re.sub(r"[^a-z0-9_]+", "_", hashtag.lower())
-    html_path = f"data/debug_instagram_{safe}_{label}_{stamp}.html"
-    png_path  = f"data/debug_instagram_{safe}_{label}_{stamp}.png"
-
-    with open(html_path, "w", encoding="utf-8") as f:
-        f.write(page.content())
-    page.screenshot(path=png_path, full_page=True)
-    print(f"[instagram][debug] HTML: {html_path}")
-    print(f"[instagram][debug] PNG : {png_path}")
-
-def _try_login_if_needed(page, username: str, password: str):
+def scrape_instagram(topic: str, username: str, password: str, target_count: int = 5):
     """
-    Best-effort: si IG te manda a login y hay credenciales, intenta.
-    Si hay 2FA/captcha, lo normal es usar login_manual.py y listo.
+    Scraper robusto de Instagram por Hashtag.
+    - topic: Hashtag (sin #)
+    - target_count: Cantidad de POSTS a analizar (no comentarios totales)
     """
-    if "/accounts/login" not in page.url:
-        return
-
-    print("[instagram] Detecté /accounts/login. Intentando login automático (best-effort)...")
-    if not (username and password):
-        print("[instagram] No hay credenciales. Usa login_manual.py --site instagram para guardar sesión.")
-        return
-
-    try:
-        # Selectores típicos (pueden cambiar, por eso best-effort)
-        page.wait_for_selector('input[name="username"]', timeout=10000)
-        page.fill('input[name="username"]', username)
-        human_delay()
-        page.fill('input[name="password"]', password)
-        human_delay()
-        # botón submit
-        page.click('button[type="submit"]')
-        page.wait_for_timeout(5000)
-    except Exception as e:
-        print(f"[instagram] No pude completar login automático: {e}")
-
-def scrape_instagram(topic: str, username: str, password: str, target_count: int = 10):
-    """
-    Interfaz compatible con main_parallel.worker:
-    - topic: string del tema (se interpreta como hashtag)
-    - username/password: opcionales (preferible sesión persistente)
-    - target_count: número objetivo de posts
-    """
-    # Perfil persistente igual que LinkedIn
     user_data_dir = os.path.join(os.getcwd(), "auth_profile_instagram")
     os.makedirs(user_data_dir, exist_ok=True)
 
     hashtag = topic.strip().lstrip("#").replace(" ", "").lower()
-    if not hashtag:
-        print("[instagram] Topic vacío. Abortando.")
-        return []
-
     start_url = f"https://www.instagram.com/explore/tags/{quote_plus(hashtag)}/"
+    
     results = []
+    
+    print(f"[Instagram] Iniciando scraper para #{hashtag} | Meta: {target_count} posts")
 
     with sync_playwright() as p:
+        # Configuración "Ninja"
         args = [
             "--start-maximized",
             "--no-sandbox",
@@ -155,135 +35,242 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
 
         ctx = p.chromium.launch_persistent_context(
             user_data_dir,
-            headless=False,           # mantener consistente con el proyecto
+            headless=False, # Ver proceso
             args=args,
             viewport=None,
         )
 
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         page.set_default_timeout(60000)
-        page.set_default_navigation_timeout(60000)
 
-        print(f"[instagram] Abriendo hashtag: #{hashtag}")
         try:
+            # 1. Navegar al Hashtag
+            print(f"[Instagram] Navegando a: {start_url}")
             page.goto(start_url, wait_until="domcontentloaded")
-        except Exception as e:
-            print(f"[instagram] Error navegando a hashtag: {e}")
-            ctx.close()
-            return []
+            time.sleep(3)
 
-        page.wait_for_timeout(4000)
-        print(f"[instagram] URL actual: {page.url}")
-        _save_debug(page, hashtag, "hashtag_loaded")
+            # Check Login
+            if "/accounts/login" in page.url:
+                print("[Instagram] Redirigido a Login. Intentando esperar login manual si el usuario está mirando...")
+                time.sleep(5)
+                if "/accounts/login" in page.url:
+                    print("[Error] No hay sesión iniciada. Ejecuta 'python login_manual.py --site instagram' primero.")
+                    ctx.close()
+                    return []
 
-        # Si redirige a login, intentar (best-effort), sino pedir login_manual
-        _try_login_if_needed(page, username, password)
-        if "/accounts/login" in page.url:
-            _save_debug(page, hashtag, "still_on_login")
-            ctx.close()
-            print("[instagram] Sigues en login. Ejecuta: python login_manual.py --site instagram")
-            return []
-
-        # Cerrar popups comunes
-        for name in ["Aceptar", "Permitir todas las cookies", "Allow all cookies", "Not now", "Ahora no"]:
-            try:
-                page.get_by_role("button", name=name).click(timeout=1500)
-            except:
-                pass
-
-        # Recolectar URLs de posts
-        # MODIFICADO: Buscamos URLs hasta tener suficientes PARA sacar comentarios.
-        # Estimamos 5 comentarios por post para no scrollear eternamente, pero el objetivo final es comentarios.
-        
-        seen = set()
-        scrolls = 0
-        estimated_posts_needed = max(10, target_count) # Mejor sobrar que faltar
-        max_scrolls = 60
-        
-        print(f"[instagram] Recolectando links para intentar llegar a {target_count} comentarios...")
-
-        while len(seen) < estimated_posts_needed and scrolls < max_scrolls:
-            hrefs = page.evaluate("""() => Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href'))""")
-            new_count = 0
-            for href in hrefs:
-                if isinstance(href, str) and POST_RE.match(href):
-                    full = "https://www.instagram.com" + href
-                    if full not in seen:
-                        seen.add(full)
-                        new_count += 1
-
-            # print(f"[instagram] scroll={scrolls} links={len(seen)}")
-
-            page.mouse.wheel(0, 3000)
-            page.wait_for_timeout(1500)
-            scrolls += 1
+            # 2. Recolectar URLs de Posts
+            post_urls = set()
+            scrolls = 0
+            print("[Instagram] Recolectando URLs de posts...")
             
-            # Si tenemos muchos links, parar early
-            if len(seen) > target_count * 1.5: break
-
-        if not seen:
-            _save_debug(page, hashtag, "no_links_after_scroll")
-            ctx.close()
-            print("[instagram] No se detectaron links /p/ o /reel/ en el hashtag.")
-            return []
-
-        post_urls = list(seen)
-        print(f"[instagram] Se visitarán hasta {len(post_urls)} posts buscando {target_count} comentarios.")
-
-        # Visit posts
-        total_comments_collected = 0
-        
-        for i, post_url in enumerate(post_urls, start=1):
-            if total_comments_collected >= target_count: 
-                print("[instagram] Meta de comentarios alcanzada.")
-                break
+            # Scrollear hasta tener suficientes
+            while len(post_urls) < target_count and scrolls < 10:
+                # Extraer hrefs que cumplan patrón /p/ o /reel/
+                hrefs = page.locator('a[href^="/p/"], a[href^="/reel/"]').all()
+                for link in hrefs:
+                    url = link.get_attribute("href")
+                    if url:
+                        full_url = "https://www.instagram.com" + url
+                        post_urls.add(full_url)
                 
-            try:
-                print(f"[instagram] ({total_comments_collected}/{target_count}) Visitando: {post_url}")
-                page.goto(post_url, wait_until="domcontentloaded")
-                page.wait_for_timeout(2500)
+                if len(post_urls) >= target_count:
+                    break
+                
+                page.mouse.wheel(0, 4000)
+                time.sleep(2)
+                scrolls += 1
+            
+            target_urls = list(post_urls)[:target_count]
+            print(f"[Instagram] Se procesarán {len(target_urls)} posts.")
 
+            # 3. Procesar cada Post
+            for i, p_url in enumerate(target_urls):
+                print(f"\n[Instagram] ({i+1}/{len(target_urls)}) Procesando: {p_url}")
                 try:
-                    page.wait_for_selector("main", timeout=15000)
-                except: pass
+                    page.goto(p_url, wait_until="domcontentloaded")
+                    time.sleep(3)
+                    
+                    # --- EXTRAER INFO DEL POST (USANDO METADATOS) ---
+                    post_author = "Desconocido"
+                    post_content = "Sin descripción"
+                    
+                    try:
+                        # Método MetaTags (Muy robusto según tu ejemplo)
+                        # Content format: "15K likes, 67 comments - AUTOR el DATE: "DESCRIPCION""
+                        og_desc = page.locator('meta[property="og:description"]').get_attribute("content")
+                        if og_desc:
+                            # 1. Extraer Autor (entre "- " y " el ")
+                            if " - " in og_desc and " el " in og_desc:
+                                parts = og_desc.split(" - ")[1].split(" el ")
+                                post_author = parts[0].strip()
+                            
+                            # 2. Extraer Contenido (lo que está entre comillas después de los dos puntos)
+                            # A veces no hay comillas si es corto, o formato varía.
+                            if ': "' in og_desc:
+                                post_content = og_desc.split(': "', 1)[1].rstrip('".')
+                            elif ": " in og_desc:
+                                post_content = og_desc.split(": ", 1)[1]
+                            
+                            print(f"   > [Meta] Autor: {post_author}")
+                    except Exception as e_meta:
+                        print(f"   > Error meta: {e_meta}")
 
-                # Caption
-                caption = ""
-                meta = page.query_selector('meta[property="og:description"]')
-                if meta:
-                    content = meta.get_attribute("content")
-                    if content:
-                        caption = content.strip()
-                        caption = re.sub(r'^.*?:\s*', '', caption)
+                    # Fallback visual para Autor si falló meta
+                    if post_author == "Desconocido":
+                        try:
+                            # Header h2 o primer link
+                            header_text = page.locator("header h2").first.inner_text()
+                            if header_text: post_author = header_text
+                        except: pass
 
-                # Extraer Comentarios (Límite aumentado a 50 por post)
-                post_comments = extract_comments(page, caption=caption, max_comments=50)
+                    print(f"   > Post Autor: {post_author} | Desc: {post_content[:30]}...")
 
-                # Guardar Post (Solo si tiene comentarios o es relevante)
-                clean_text = caption.replace("\n", " | ").strip()
-                if clean_text:
-                    results.append({
-                        "source": "Instagram", "type": "post",
-                        "author": "Desconocido", "content": clean_text,
-                        "url": post_url
-                    })
+                    # --- CARGAR COMENTARIOS ---
+                    print("   > Expandiendo comentarios (Max 50 clicks/scroll)...")
+                    for _ in range(50):
+                        try:
+                            found_button = False
+                            # 1. Botón circular (+) típico
+                            btn_svg = page.locator('svg[aria-label="Cargar más comentarios"]').locator("..")
+                            if btn_svg.count() > 0 and btn_svg.first.is_visible():
+                                btn_svg.first.click()
+                                found_button = True
+                            
+                            # 2. Botón de texto "Ver más comentarios" (alternativo)
+                            if not found_button:
+                                btn_txt = page.locator('button:has-text("Ver más comentarios")') # No exacto, contiene
+                                if btn_txt.count() > 0 and btn_txt.first.is_visible():
+                                    btn_txt.first.click()
+                                    found_button = True
 
-                # Guardar Comentarios
-                for comment_text in post_comments:
-                    if total_comments_collected >= target_count: break
-                    results.append({
-                        "source": "Instagram", "type": "comment",
-                        "author": "Desconocido", "content": comment_text,
-                        "parent_url": post_url
-                    })
-                    total_comments_collected += 1
+                            if found_button:
+                                time.sleep(2) # Esperar carga
+                            else:
+                                # Scroll para ver si aparece abajo
+                                page.mouse.wheel(0, 600)
+                                time.sleep(1)
+                        except: break
 
-                human_delay()
+                    # --- EXPANDIR RESPUESTAS ANIDADAS (NUEVO) ---
+                    # Basado en tu HTML: "Ver las 1 respuestas"
+                    print("   > Expandiendo sub-respuestas (puede tardar)...")
+                    try:
+                        # Buscar botones que digan "Ver las..." o "View replies"
+                        # Usamos un selector generico de texto
+                        nested_btns = page.locator('div[role="button"] span:has-text("Ver las"), div[role="button"] span:has-text("View replies")').all()
+                        
+                        # Limitamos a clicar unos 10-20 para no eternizar
+                        clicks = 0
+                        for btn in nested_btns:
+                            if clicks > 50: break
+                            if btn.is_visible():
+                                try:
+                                    btn.click(force=True)
+                                    time.sleep(0.5)
+                                    clicks += 1
+                                except: pass
+                        if clicks > 0:
+                            print(f"   > Se expandieron {clicks} hilos de respuestas.")
+                            time.sleep(2) # Esperar que rendericen
+                    except: pass
 
-            except Exception as e:
-                print(f"[instagram] Error en {post_url}: {e}")
+                    # --- EXTRAER COMENTARIOS (NUEVA ESTRATEGIA: POR BOTÓN "RESPONDER") ---
+                    comments_found = 0
+                    seen_comments = set()
+                    
+                    try:
+                        # Cada comentario tiene un botón "Responder" (o "Reply")
+                        # Buscamos todos esos botones
+                        reply_btns = page.locator('div[role="button"]:has-text("Responder"), div[role="button"]:has-text("Reply")').all()
+                        
+                        # Si no encuentra por role=button, busca por texto span
+                        if not reply_btns:
+                             reply_btns = page.locator('span:has-text("Responder"), span:has-text("Reply")').all()
+                        
+                        print(f"   > Candidatos (botones responder): {len(reply_btns)}")
+                        
+                        limit_comments_per_post = 50
+                        
+                        for btn in reply_btns:
+                            if comments_found >= limit_comments_per_post: break
+                            
+                            try:
+                                # El texto del comentario suele estar:
+                                # 1. En un contenedor padre del botón 'Responder'.
+                                # 2. Específicamente, en un <span> o <div> hermano o tío.
+                                
+                                # Subimos al contenedor del comentario (LI o DIV wrapper)
+                                # Normalmente el botón responder está en una fila de acciones. El texto está arriba.
+                                
+                                # Intentamos subir 3-4 niveles hasta abarcar todo el bloque del comentario
+                                comment_block = btn.locator('xpath=./../../../../..') 
+                                
+                                # Extraemos todo el texto del bloque
+                                block_text = comment_block.inner_text()
+                                lines = [l.strip() for l in block_text.split('\n') if l.strip()]
+                                
+                                if not lines: continue
+                                
+                                # Parseo Heurístico
+                                # Normalmente: 
+                                # [FOTO]
+                                # AUTOR (con verificado opcional)
+                                # TEXTO
+                                # FECHA - RESPONDER - TRADUCIR
+                                
+                                c_author = lines[0] # Primera línea suele ser autor
+                                c_content = ""
+                                
+                                # Filtrar líneas basura
+                                clean_lines = []
+                                for l in lines[1:]:
+                                    if (l != c_author 
+                                        and "Responder" not in l 
+                                        and "Reply" not in l
+                                        and "Me gusta" not in l
+                                        and not re.match(r'^\d+[smhdw]$', l) # Fechas cortas
+                                        and "Ver traducción" not in l
+                                        ):
+                                        clean_lines.append(l)
+                                
+                                c_content = " ".join(clean_lines)
 
-        ctx.close()
+                                # Limpieza EXTRA: Quitar fechas del principio del contenido (Ej: "3 sem Hola")
+                                c_content = re.sub(r'^\d+\s+(sem|sem\.|d|h|m|s|w)\s+', '', c_content).strip()
+                                
+                                # Validar
+                                if len(c_content) > 1 and c_content not in seen_comments:
+                                    # Evitar que sea la descripción del post repetida
+                                    if c_author == post_author and (post_content in c_content or c_content in post_content):
+                                        continue
+                                    
+                                    # Limpieza final de Post Content (por seguridad)
+                                    clean_post = post_content.replace("\n", " | ").replace("\r", "").strip()
 
-    print(f"[instagram] Finalizado. Extraje {total_comments_collected} comentarios.")
+                                    results.append({
+                                        "post_index": i + 1,
+                                        "post_author": post_author,
+                                        "post_content": clean_post,
+                                        "comment_author": c_author,
+                                        "comment_content": c_content
+                                    })
+                                    seen_comments.add(c_content)
+                                    comments_found += 1
+                                    
+                            except: pass
+                            
+                    except Exception as e_comm:
+                        print(f"   > Error extrayendo comentarios: {e_comm}")
+
+                    print(f"   > Comentarios extraídos: {comments_found}")
+
+                except Exception as e:
+                    print(f"[Error] Fallo procesando {p_url}: {e}")
+
+        except Exception as e:
+            print(f"[Error Global] {e}")
+            pass
+        finally:
+            ctx.close()
+
     return results
