@@ -127,8 +127,20 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
 
                     # --- CARGAR COMENTARIOS ---
                     print("   > Expandiendo comentarios (Max 50 clicks/scroll)...")
+                    consecutive_not_found = 0
+                    
+                    # Pre-chequeo del límite para no expandir de más
+                    # (Leemos la variable que se define más abajo, o usamos un valor default alto si no existe aun)
+                    current_limit = 50 
+
                     for _ in range(50):
                         try:
+                            # Chequeo rápido de cantidad actual
+                            current_candidates = page.locator('div[role="button"]:has-text("Responder"), div[role="button"]:has-text("Reply"), span:has-text("Responder")').count()
+                            if current_candidates >= current_limit + 10: 
+                                print("   > Límite de comentarios alcanzado visualmente. Deteniendo carga.")
+                                break
+
                             found_button = False
                             # 1. Botón circular (+) típico
                             btn_svg = page.locator('svg[aria-label="Cargar más comentarios"]').locator("..")
@@ -138,17 +150,23 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
                             
                             # 2. Botón de texto "Ver más comentarios" (alternativo)
                             if not found_button:
-                                btn_txt = page.locator('button:has-text("Ver más comentarios")') # No exacto, contiene
+                                btn_txt = page.locator('button:has-text("Ver más comentarios")')
                                 if btn_txt.count() > 0 and btn_txt.first.is_visible():
                                     btn_txt.first.click()
                                     found_button = True
 
                             if found_button:
-                                time.sleep(2) # Esperar carga
+                                consecutive_not_found = 0
+                                time.sleep(1.5) # Esperar carga (reducido de 2)
                             else:
-                                # Scroll para ver si aparece abajo
+                                # Scroll y conteo de fallos
                                 page.mouse.wheel(0, 600)
-                                time.sleep(1)
+                                time.sleep(0.8)
+                                consecutive_not_found += 1
+                                
+                                if consecutive_not_found >= 3:
+                                    # Si fallamos 3 veces seguidas (scroll y no botón), asumimos fln
+                                    break
                         except: break
 
                     # --- EXPANDIR RESPUESTAS ANIDADAS (NUEVO) ---
@@ -189,7 +207,7 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
                         
                         print(f"   > Candidatos (botones responder): {len(reply_btns)}")
                         
-                        limit_comments_per_post = 50
+                        limit_comments_per_post = 100
                         
                         for btn in reply_btns:
                             if comments_found >= limit_comments_per_post: break
