@@ -11,9 +11,8 @@ import config
 
 SLEEP_MIN = 1.0
 SLEEP_MAX = 2.2
-MAX_SCROLLS = 6
-TARGET_TWEETS = 12
-TARGET_REPLIES_PER_TWEET = 15
+MAX_SCROLLS = 100 # Scroll global del feed
+TARGET_REPLIES_PER_TWEET = 500 # Máximo por post
 
 
 def human_delay(multiplier: float = 1.0) -> None:
@@ -113,35 +112,166 @@ def scrape_conversation(context, url: str) -> Dict[str, List[Dict[str, str]]]:
     convo_page = context.new_page()
     convo_results = {"post": None, "replies": []}
     try:
-        human_delay(1.2)
+        human_delay(1.5)
         convo_page.goto(url, wait_until="domcontentloaded")
-        convo_page.wait_for_selector('article', timeout=20000)
-        human_delay()
-        articles = convo_page.locator('article')
-        total = articles.count()
-        for idx in range(total):
-            article = articles.nth(idx)
-            text = extract_text(article)
-            if not text:
-                continue
-            handle = extract_handle(article)
-            timestamp = extract_timestamp(article)
-            permalink = extract_permalink(article)
-            entry = {
-                "source": "X",
-                "type": "post" if idx == 0 else "reply",
-                "url": permalink or url,
-                "author": handle,
-                "content": text,
-                "datetime": timestamp,
-                "parent_url": url if idx > 0 else url,
-            }
-            if idx == 0 and convo_results["post"] is None:
-                convo_results["post"] = entry
+        
+        # DEBUG: Screenshot para ver qué pasa
+        safe_name = url.split('/')[-1]
+        try:
+            convo_page.screenshot(path=f"debug_tweet_{safe_name}.png")
+        except: pass
+        try:
+             convo_page.wait_for_selector('article', timeout=15000)
+        except: 
+             print(f"   > [X] No se detectó artículo en {url}")
+             return convo_results
+
+        # Scroll INTELIGENTE con Teclado (PageDown)
+        # Esto suele disparar mejor los eventos de carga que el mouse.wheel
+        
+        # 1. Intentar hacer foco en el tweet principal
+        try:
+            convo_page.locator('article').first.click(force=True) 
+        except: 
+            convo_page.mouse.click(100, 100) # Click genérico si falla
+            
+        last_height = convo_page.evaluate("document.body.scrollHeight")
+        no_change_count = 0
+        
+        print("   > Navegando respuestas (PageDown)...")
+        for _ in range(30): 
+            # Usar teclado para bajar
+            convo_page.keyboard.press("PageDown")
+            human_delay(1.5) 
+            
+            # Chequear botones "Mostrar más"
+            try:
+                more_btns = convo_page.locator('div[role="button"]:has-text("Mostrar más"), span:has-text("Mostrar más")').all()
+                for btn in more_btns:
+                    if btn.is_visible():
+                        btn.click()
+                        human_delay(1.0)
+            except: pass
+
+            new_height = convo_page.evaluate("document.body.scrollHeight")
+            # print(f"     Height: {last_height} -> {new_height}")
+            
+            if new_height == last_height:
+                no_change_count += 1
+                if no_change_count >= 4: # Si en 4 intentos no baja más, paramos
+                    break
             else:
-                convo_results["replies"].append(entry)
-            if len(convo_results["replies"]) >= TARGET_REPLIES_PER_TWEET:
-                break
+                no_change_count = 0
+                last_height = new_height
+            
+        # Estrategia Mejorada para Identificar Post Principal y Respuestas
+        
+        # 1. Extraer el handle del autor esperado desde la URL
+        # URL típica: https://x.com/Tania840942/status/201589...
+        try:
+             expected_author_handle = "@" + url.split('x.com/')[1].split('/')[0]
+        except:
+             expected_author_handle = ""
+
+        # ESTRATEGIA DEFINITIVA: Buscar el Focal Tweet por tabindex="-1"
+        # Twitter suele marcar el tweet abierto con tabindex="-1" en el article.
+        focal_article = convo_page.locator('article[tabindex="-1"]').first
+        
+        main_post_data = None
+        
+        if focal_article.count() > 0:
+            try:
+                # Extraer texto del focal
+                f_text_el = focal_article.locator('div[data-testid="tweetText"]').first
+                if f_text_el.count() > 0:
+                     f_raw = f_text_el.inner_text()
+                     f_txt = f_raw.replace("\n", " ").replace("\r", " ").strip()
+                     f_handle = extract_handle(focal_article)
+                     f_time = extract_timestamp(focal_article)
+                     
+                     main_post_data = {
+                        "source": "X",
+                        "type": "post",
+                        "url": url,
+                        "author": f_handle,
+                        "content": f_txt,
+                        "datetime": f_time,
+                        "parent_url": url 
+                     }
+                     print(f"   > Post Principal IDENTIFICADO por tabindex: {f_handle}")
+            except: pass
+
+        # Si falló la estrategia del tabindex, usamos la del autor
+        if not main_post_data:
+             # (Lógica de fallback anterior, simplificada)
+             pass
+
+        tweet_texts = convo_page.locator('div[data-testid="tweetText"]')
+        count = tweet_texts.count()
+        
+        candidates = []
+        for i in range(count):
+            try:
+                el = tweet_texts.nth(i)
+                raw_txt = el.inner_text()
+                txt = raw_txt.replace("\n", " ").replace("\r", " ").strip()
+                if not txt: continue
+                
+                container = el.locator('xpath=./ancestor::article')
+                if container.count() == 0: continue
+                
+                handle = extract_handle(container)
+                
+                candidates.append({
+                    "text": txt,
+                    "author": handle
+                })
+            except: pass
+            
+        if not main_post_data:
+             # Fallback lógica autor URL
+             # ... (reutilizar lo que ya estaba o simplificar)
+             # Por simplicidad, si no hallamos tabindex, usamos el primero que coincida con URL 
+             main_idx = 0
+             for i, c in enumerate(candidates):
+                 if expected_author_handle and c["author"] and expected_author_handle.lower() in c["author"].lower():
+                     main_idx = i
+                     break
+             
+             if candidates:
+                 c = candidates[main_idx]
+                 main_post_data = {
+                    "source": "X",
+                    "type": "post",
+                    "url": url,
+                    "author": c["author"],
+                    "content": c["text"],
+                    "datetime": "",
+                    "parent_url": url 
+                 }
+
+        if main_post_data:
+            convo_results["post"] = main_post_data
+            
+            # Agregar respuestas (excluyendo el texto del main post)
+            for c in candidates:
+                # Excluir si es el mismo contenido y autor que el main
+                if c["text"] == main_post_data["content"] and c["author"] == main_post_data["author"]:
+                    continue
+                    
+                convo_results["replies"].append({
+                    "source": "X",
+                    "type": "reply",
+                    "url": url,
+                    "author": c["author"],
+                    "content": c["text"],
+                    "datetime": "",
+                    "parent_url": url
+                })
+                if len(convo_results["replies"]) >= TARGET_REPLIES_PER_TWEET:
+                    break
+        
+        return convo_results
     except TimeoutError:
         print(f"[X] Timeout cargando conversación: {url}")
     except Exception as exc:
@@ -153,7 +283,7 @@ def scrape_conversation(context, url: str) -> Dict[str, List[Dict[str, str]]]:
 
 def scrape_twitter(topic: str, username: str, password: str, target_count: int = 10) -> List[Dict[str, str]]:
     results: List[Dict[str, str]] = []
-    print(f"[X] Iniciando hilo para: {topic} | Meta: {target_count}")
+    print(f"[X] Iniciando para: {topic} | Meta: {target_count} POSTS")
 
     if config.X_PROFILE_PATH:
         user_data_dir = config.X_PROFILE_PATH
@@ -164,14 +294,24 @@ def scrape_twitter(topic: str, username: str, password: str, target_count: int =
     with sync_playwright() as p:
         context = None
         browser = None
-        try:
-            if config.X_REMOTE_DEBUGGING_URL:
+        # Intentar conectar a navegador existente (si está configurado)
+        use_remote = False
+        if config.X_REMOTE_DEBUGGING_URL:
+            try:
+                # print(f"[X] Intentando conectar a navegador remoto en {config.X_REMOTE_DEBUGGING_URL}...")
                 browser = p.chromium.connect_over_cdp(config.X_REMOTE_DEBUGGING_URL)
                 if browser.contexts:
                     context = browser.contexts[0]
                 else:
                     context = browser.new_context()
-            else:
+                use_remote = True
+                print("[X] Conectado exitosamente.")
+            except Exception as e:
+                print(f"[X] No se pudo conectar al remoto ({e}). Iniciando nueva instancia...")
+
+        # Si no se conectó al remoto, iniciar uno nuevo persistente
+        if not context:
+            try:
                 args = [
                     "--start-maximized",
                     "--disable-gpu",
@@ -192,12 +332,12 @@ def scrape_twitter(topic: str, username: str, password: str, target_count: int =
                     launch_kwargs["channel"] = config.X_BROWSER_CHANNEL
 
                 context = p.chromium.launch_persistent_context(**launch_kwargs)
-        except Exception as exc:
-            print(f"[X] No se pudo iniciar el navegador persistente: {exc}")
-            return results
+            except Exception as exc:
+                print(f"[X] Error fatal iniciando navegador: {exc}")
+                return results
 
         if context is None:
-            print("[X] No se pudo obtener un contexto de navegador para scraping.")
+            print("[X] No context. Aborting.")
             return results
 
         page = context.pages[0] if context.pages else context.new_page()
@@ -208,20 +348,21 @@ def scrape_twitter(topic: str, username: str, password: str, target_count: int =
             if not logged_in:
                 human_delay(2.0)
 
-            search_url = f"https://x.com/search?q={topic}&src=typed_query&f=live"
+            # Búsqueda TOP (Destacados)
+            search_url = f"https://x.com/search?q={topic}&src=typed_query" 
             print(f"[X] Buscando '{topic}'...")
             page.goto(search_url, wait_until="domcontentloaded")
             human_delay(2.0)
 
             seen_urls = set()
             scrolls = 0
+            post_idx = 0
             
-            # --- MODIFICADO: Contar Comentarios (Respuestas), no solo Posts ---
             collected_comments = 0
             
-            # Bucle infinito hasta cumplir meta de comentarios
-            while collected_comments < target_count and scrolls < 50:
-                print(f"[X] Bucle principal: {collected_comments}/{target_count} comentarios. Scroll {scrolls}...")
+            # --- BUCLE PRINCIPAL (Por Post) ---
+            while post_idx < target_count and scrolls < MAX_SCROLLS:
+                print(f"[X] Progreso: {post_idx}/{target_count} posts procesados. Feed scroll {scrolls}...")
                 
                 # 1. Identificar Tweets en pantalla
                 tweets = page.locator('article[data-testid="tweet"]')
@@ -229,7 +370,7 @@ def scrape_twitter(topic: str, username: str, password: str, target_count: int =
                 
                 # Iterar sobre tweets visibles
                 for idx in range(count):
-                    if collected_comments >= target_count: break
+                    if post_idx >= target_count: break
                     
                     try:
                         article = tweets.nth(idx)
@@ -240,33 +381,61 @@ def scrape_twitter(topic: str, username: str, password: str, target_count: int =
                             continue
                         seen_urls.add(permalink)
                         
-                        # Scrape Conversación (Aquí es donde sacamos los comentarios/respuestas)
+                        # PROCESS TWEET
+                        print(f"   > [Post {post_idx+1}] Procesando: {permalink}")
                         human_delay(0.5)
                         convo_data = scrape_conversation(context, permalink)
                         
-                        # Guardar Post Original (Opcional, pero útil para contexto)
-                        if convo_data["post"]:
-                            results.append(convo_data["post"])
-                        
-                        # Guardar Respuestas (Estos son los "comentarios")
+                        post_data = convo_data["post"]
                         replies = convo_data["replies"]
-                        if replies:
-                            results.extend(replies)
-                            collected_comments += len(replies)
-                            print(f"   > +{len(replies)} respuestas extraídas. Total: {collected_comments}")
+                        
+                        # Si encontramos el post (aunque tenga 0 comentarios, cuenta como procesado)
+                        # Pero para maximizar utilidad, sigamos la lógica de guardar.
+                        if post_data:
+                            post_idx += 1
+                            p_author = post_data["author"]
+                            p_content = post_data["content"]
+                            
+                            num_replies = len(replies)
+                            
+                            # Si no hay respuestas, podríamos guardar 1 fila con comment vacio
+                            # o no guardar nada si preferimos solo data con interacción.
+                            # Guardaremos todo para cumplir la cuota de "Posts analizados".
+                            
+                            if num_replies == 0:
+                                # Opcional: Descomentar para guardar posts sin comentarios
+                                # results.append({
+                                #    "post_index": post_idx,
+                                #    "post_author": p_author,
+                                #    "post_content": p_content,
+                                #    "comment_author": "N/A",
+                                #    "comment_content": "No comments found"
+                                # })
+                                pass
+                            else:
+                                for reply in replies:
+                                    results.append({
+                                        "post_index": post_idx,
+                                        "post_author": p_author,
+                                        "post_content": p_content,
+                                        "comment_author": reply["author"],
+                                        "comment_content": reply["content"]
+                                    })
+                            
+                            collected_comments += num_replies
+                            print(f"     + {num_replies} respuestas. Total global: {collected_comments}")
                             
                     except Exception as e:
-                        # print(f"Err tweet {idx}: {e}")
                         pass
                 
-                if collected_comments >= target_count: break
+                if post_idx >= target_count: break
                 
-                # Scroll para ver más tweets
+                # Scroll Feed Principal
                 page.mouse.wheel(0, 2500)
                 human_delay(2.0)
                 scrolls += 1
             
-            print(f"[X] Finalizado. {len(results)} items totales ({collected_comments} respuestas).")
+            print(f"[X] Finalizado. {post_idx} posts procesados. {collected_comments} respuestas extraídas.")
 
         except TimeoutError:
             print("[X] Timeout durante la carga inicial o búsqueda. Reintentando refresh...")
