@@ -404,17 +404,18 @@ def scrape_twitter(topic: str, username: str, password: str, target_count: int =
                             
                             if num_replies == 0:
                                 # Opcional: Descomentar para guardar posts sin comentarios
-                                # results.append({
-                                #    "post_index": post_idx,
-                                #    "post_author": p_author,
-                                #    "post_content": p_content,
-                                #    "comment_author": "N/A",
-                                #    "comment_content": "No comments found"
-                                # })
-                                pass
+                                results.append({
+                                   "platform": "X",
+                                   "post_index": post_idx,
+                                   "post_author": p_author,
+                                   "post_content": p_content,
+                                   "comment_author": "N/A",
+                                   "comment_content": "No comments found"
+                                })
                             else:
                                 for reply in replies:
                                     results.append({
+                                        "platform": "X",
                                         "post_index": post_idx,
                                         "post_author": p_author,
                                         "post_content": p_content,

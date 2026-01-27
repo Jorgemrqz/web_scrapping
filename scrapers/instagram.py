@@ -266,6 +266,7 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
                                     clean_post = post_content.replace("\n", " | ").replace("\r", "").strip()
 
                                     results.append({
+                                        "platform": "Instagram",
                                         "post_index": i + 1,
                                         "post_author": post_author,
                                         "post_content": clean_post,

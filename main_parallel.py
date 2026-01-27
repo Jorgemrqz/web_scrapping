@@ -132,12 +132,25 @@ if __name__ == "__main__":
     if all_data:
         try:
             df = pd.DataFrame(all_data)
+            
+            # Reordenar columnas para que Platform quede primero
+            desired_order = ["platform", "post_index", "post_author", "post_content", "comment_author", "comment_content"]
+            # Seleccionar solo las que existen realmente en los datos
+            final_cols = [c for c in desired_order if c in df.columns]
+            # Añadir cualquier extra inesperada al final
+            final_cols += [c for c in df.columns if c not in final_cols]
+            
+            df = df[final_cols]
             excel_filename = f"data/corpus_{topic}.xlsx"
             csv_filename = f"data/corpus_{topic}.csv"
             
             # Limpiar caracteres ilegales para Excel
             # (Excel no soporta ciertos caracteres de control)
-            df = df.applymap(lambda x: x.encode('unicode_escape').decode('utf-8') if isinstance(x, str) else x)
+            try:
+                df = df.map(lambda x: x.encode('unicode_escape').decode('utf-8') if isinstance(x, str) else x)
+            except AttributeError:
+                # Fallback para versiones viejas de pandas
+                df = df.applymap(lambda x: x.encode('unicode_escape').decode('utf-8') if isinstance(x, str) else x)
 
             # df.to_excel(excel_filename, index=False) # Excel desactivado a petición
             df.to_csv(csv_filename, index=False, encoding="utf-8-sig")

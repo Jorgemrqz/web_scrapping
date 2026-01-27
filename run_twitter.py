@@ -37,7 +37,7 @@ def main():
         df = pd.DataFrame(data)
         
         # Reordenar columnas estándar
-        cols = ["post_index", "post_author", "post_content", "comment_author", "comment_content"]
+        cols = ["platform", "post_index", "post_author", "post_content", "comment_author", "comment_content"]
         existing_cols = [c for c in cols if c in df.columns]
         # Agregar las que falten al final
         remaining = [c for c in df.columns if c not in cols]

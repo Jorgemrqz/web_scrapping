@@ -375,6 +375,7 @@ def scrape_facebook(topic, email, password, target_count=10):
                         # Si no hay comentarios, guardar al menos el post
                         if c_qty == 0:
                              results.append({
+                                "platform": "Facebook",
                                 "post_index": posts_scraped + 1,
                                 "post_author": post_author,
                                 "post_content": post_content,
@@ -430,6 +431,7 @@ def scrape_facebook(topic, email, password, target_count=10):
 
                                 if len(c_content) > 0:
                                     results.append({
+                                        "platform": "Facebook",
                                         "post_index": posts_scraped + 1,
                                         "post_author": post_author,
                                         "post_content": post_content, # Ya está limpio
