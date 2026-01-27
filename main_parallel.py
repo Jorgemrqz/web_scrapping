@@ -29,15 +29,17 @@ def worker(platform, topic, creds, limit=15):
     if platform == "facebook":
         data = scrape_facebook(topic, creds['email'], creds['password'], target_count=limit)
     elif platform == "twitter":
-        if creds['username']:
-            data = scrape_twitter(topic, creds['username'], creds['password'], target_count=limit)
+        t_user = creds.get('email') or creds.get('username')
+        if t_user:
+            data = scrape_twitter(topic, t_user, creds['password'], target_count=limit)
         else:
             print(f"[{platform}] Salteando (sin credenciales)")
     elif platform == "linkedin":
         if creds['email'] or True: # Permitir intento con cookies guardadas
             data = scrape_linkedin(topic, creds['email'], creds['password'], target_count=limit)
     elif platform == "instagram":
-        data = scrape_instagram(topic, creds['username'], creds['password'], target_count=limit)
+        i_user = creds.get('username') or creds.get('email')
+        data = scrape_instagram(topic, i_user, creds['password'], target_count=limit)
     
     return data
 
@@ -69,24 +71,12 @@ if __name__ == "__main__":
     
     print(f"[Config] Meta unificada: {limit} posts por red.")
     
-    # 2. Configurar FACEBOOK
-    if config.FB_EMAIL and config.FB_PASSWORD:
-        CREDENTIALS["facebook"]["email"] = config.FB_EMAIL
-        CREDENTIALS["facebook"]["password"] = config.FB_PASSWORD
-        print(f"[Config] Credenciales Facebook cargadas.")
-    else:
-        pass # Input manual... omitido por brevedad
+    print(f"[Config] Meta unificada: {limit} posts por red.")
     
-    # 3. Configurar LINKEDIN/TWITTER
-    if config.LINKEDIN_EMAIL and config.LINKEDIN_PASSWORD:
-        CREDENTIALS["linkedin"]["email"] = config.LINKEDIN_EMAIL
-        CREDENTIALS["linkedin"]["password"] = config.LINKEDIN_PASSWORD
-        print(f"[Config] Credenciales LinkedIn cargadas.")
-
-    if config.X_USER:
-        CREDENTIALS["twitter"]["username"] = config.X_USER
-        CREDENTIALS["twitter"]["password"] = config.X_PASSWORD
-        print(f"[Config] Credenciales Twitter cargadas.")
+    # 2. Cargar Credenciales desde Config Centralizado
+    CREDENTIALS = config.CREDENTIALS
+    
+    print("\n[Orquestador] Iniciando extracción PARALELA...")
     
     print("\n[Orquestador] Iniciando extracción PARALELA...")
     
@@ -130,33 +120,58 @@ if __name__ == "__main__":
 
     # exportar a Excel / CSV
     if all_data:
-        try:
-            df = pd.DataFrame(all_data)
-            
-            # Reordenar columnas para que Platform quede primero
-            desired_order = ["platform", "post_index", "post_author", "post_content", "comment_author", "comment_content"]
-            # Seleccionar solo las que existen realmente en los datos
-            final_cols = [c for c in desired_order if c in df.columns]
-            # Añadir cualquier extra inesperada al final
-            final_cols += [c for c in df.columns if c not in final_cols]
-            
-            df = df[final_cols]
-            excel_filename = f"data/corpus_{topic}.xlsx"
-            csv_filename = f"data/corpus_{topic}.csv"
-            
-            # Limpiar caracteres ilegales para Excel
-            # (Excel no soporta ciertos caracteres de control)
-            try:
-                df = df.map(lambda x: x.encode('unicode_escape').decode('utf-8') if isinstance(x, str) else x)
-            except AttributeError:
-                # Fallback para versiones viejas de pandas
-                df = df.applymap(lambda x: x.encode('unicode_escape').decode('utf-8') if isinstance(x, str) else x)
+       # Create DataFrame
+        df = pd.DataFrame(all_data)
 
-            # df.to_excel(excel_filename, index=False) # Excel desactivado a petición
-            df.to_csv(csv_filename, index=False, encoding="utf-8-sig")
-            print(f"[Export] Datos exportados también a {csv_filename}")
+        # ---------------------------------------------------------
+        # FASE 2: PROCESAMIENTO CON LLMs (Práctica 06)
+        # ---------------------------------------------------------
+        try:
+            from llm_processor import process_dataframe_concurrently
+            print("\n[INFO] Iniciando Fase 2: Clasificación de Sentimiento con LLMs...")
+            df = process_dataframe_concurrently(df)
+            print("[INFO] Fase 2 completada.")
         except Exception as e:
-            print(f"[Export Error] No se pudo exportar a Excel/CSV: {e}")
+            print(f"\n[WARN] No se pudo ejecutar el análisis de LLMs: {e}")
+            print("Continuando con la exportación solo de datos scrapeados...")
+
+        # Reorder columns if desired
+        # Expected columns: platform, post_index, post_author, post_content, comment_author, comment_content, sentiment_llm, explanation_llm
+        cols = ['platform', 'sentiment_llm', 'explanation_llm', 'post_index', 'post_author', 'post_content', 'comment_author', 'comment_content']
+        # Filter to only existing columns
+        cols = [c for c in cols if c in df.columns] + [c for c in df.columns if c not in cols and c not in ['sentiment_llm', 'explanation_llm']]
+        
+        df = df[cols]
+
+        # Export
+        print("Exporting data...")
+
+        # 1. Excel (requires openpyxl)
+        try:
+            excel_name = f"corpus_{topic}.xlsx"
+            df.to_excel(os.path.join("data", excel_name), index=False)
+            print(f"Saved Excel: {excel_name}")
+        except Exception as e:
+            print(f"Could not save Excel: {e}")
+
+        # 2. CSV
+        try:
+            csv_name = f"corpus_{topic}.csv"
+            # Escape special characters to avoid breaking CSV format
+            # Use simple str() conversion or specific replacement
+            df.to_csv(os.path.join("data", csv_name), index=False, encoding='utf-8-sig') # utf-8-sig for Excel compatibility
+            print(f"Saved CSV: {csv_name}")
+        except Exception as e:
+            print(f"Could not save CSV: {e}")
+            try:
+               # Fallback for older pandas versions usually not needed but safety first
+               print("Standard export failed, trying alternative...")
+               # This line was problematic in the original snippet, fixing it to be valid Python
+               df_cleaned = df.applymap(lambda x: x.encode('unicode_escape').decode('utf-8') if isinstance(x, str) else x)
+               df_cleaned.to_csv(os.path.join("data", csv_name), index=False, encoding='utf-8-sig')
+            except Exception as inner_e:
+               print(f"Alternative CSV export also failed: {inner_e}")
+
 
     # 4. Ejecutar Pipeline de NLP
     print("\n[Orquestador] Iniciando procesamiento de NLP...")

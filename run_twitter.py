@@ -26,7 +26,12 @@ def main():
     print(f"Meta de posts: {limit}")
     
     # 3. Ejecutar Scraper
-    data = scrape_twitter(topic, config.X_USER, config.X_PASSWORD, target_count=limit)
+    # Usa las nuevas credenciales en dictionario
+    t_creds = config.CREDENTIALS.get("twitter", {})
+    t_user = t_creds.get("email", "") or t_creds.get("username", "") # Fallback
+    t_pass = t_creds.get("password", "")
+    
+    data = scrape_twitter(topic, t_user, t_pass, target_count=limit)
     
     # 4. Guardar Resultados
     if data:
