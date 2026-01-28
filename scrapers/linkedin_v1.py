@@ -111,8 +111,55 @@ def scrape_linkedin(topic, email, password, target_count=10):
                                 author = l
                                 break
                         
-                        post_clean = full_txt.split("Recomendar")[0].replace("\n", " ").strip()
-                        # Limpieza extra de UI
+                        # Limpieza profunda del Post
+                        raw_text = full_txt
+                        
+                        # 1. Cortar pie de página (Botones de acción)
+                        # Intentamos varios splitters comunes
+                        for splitter in ["Recomendar", "recomendar", "Like", "Gostar"]:
+                            if splitter in raw_text:
+                                raw_text = raw_text.split(splitter)[0]
+                                break
+                        
+                        # 2. Cortar Cabecera (Bio, Tiempo, Botón Seguir)
+                        header_cut = False
+                        if "Seguir" in raw_text[:800]:
+                            parts = raw_text.split("Seguir", 1)
+                            if len(parts) > 1: raw_text = parts[1]; header_cut = True
+                        elif "Follow" in raw_text[:800]:
+                            parts = raw_text.split("Follow", 1)
+                            if len(parts) > 1: raw_text = parts[1]; header_cut = True
+                        
+                        # Fallback: Si no cortamos por "Seguir", usamos Regex de tiempo (Ej: "5 d •", "23 h •", "1 sem •")
+                        if not header_cut:
+                            # Busca patrón: digitos + espacios + (d/h/m/s/sem/yr) + espacios + opcional(•)
+                            # Ejemplos que atrapa: "5 días", "2 h", "1 semana •"
+                            match = re.search(r'\b\d+\s+(días|dí|d|h|HORAS|m|min|minutos|sem|semanas|w|y|año|años)\s*•?', raw_text[:800], re.IGNORECASE)
+                            if match:
+                                # Cortamos justo después del match
+                                raw_text = raw_text[match.end():]
+                                header_cut = True
+
+                        # 3. Limpieza de frases basura específicas
+                        replacements = [
+                            ("Publicación en el feed", ""), ("Post in feed", ""),
+                            ("Mostrar traducción", ""), ("Show translation", ""),
+                            ("… más", ""), ("... more", ""), ("… ver más", ""),
+                            ("Estado del botón de reacción:", ""),
+                            ("Editado", ""), ("Edited", "")
+                        ]
+                        for old, new in replacements:
+                            raw_text = raw_text.replace(old, new)
+
+                        post_clean = raw_text.replace("\n", " ").strip()
+                        
+                        # 4. Limpieza final: Si empieza con el nombre del autor (residuo), lo quitamos
+                        if post_clean.startswith(author):
+                            post_clean = post_clean[len(author):].strip()
+                        
+                        # Limpieza extra de UI (Filtros anteriores)
+                        
+                        # Limpieza extra de UI (Filtros anteriores)
                         if post_clean.startswith("Más relevantes"): post_clean = post_clean.replace("Más relevantes", "", 1).strip()
                         if post_clean.startswith("Most relevant"): post_clean = post_clean.replace("Most relevant", "", 1).strip()
                         
