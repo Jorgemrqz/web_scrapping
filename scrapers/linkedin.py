@@ -44,12 +44,11 @@ def scrape_linkedin(topic, email, password, target_count=10):
             processed_ids = set()
             scroll_attempts_without_new = 0
             
-            # Counter exclusivo de comentarios
-            total_comments_extracted = 0
+            total_posts_extracted = 0
             
-            while total_comments_extracted < target_count and scroll_attempts_without_new < 15:
+            while total_posts_extracted < target_count and scroll_attempts_without_new < 15:
                 
-                print(f"[LinkedIn] Escaneando... (Comentarios: {total_comments_extracted}/{target_count})")
+                print(f"[LinkedIn] Escaneando... (Posts procesados: {total_posts_extracted}/{target_count})")
                 
                 found_posts = []
                 # Filtro regex más amplio para asegurar que detectamos el botón
@@ -74,7 +73,7 @@ def scrape_linkedin(topic, email, password, target_count=10):
                 new_in_pass = 0
                 
                 for post_item, action_btn in found_posts:
-                    if total_comments_extracted >= target_count: break
+                    if total_posts_extracted >= target_count: break
                     
                     try:
                         # 1. Chequeo duplicados
@@ -172,7 +171,8 @@ def scrape_linkedin(topic, email, password, target_count=10):
                             "comment_content": ""
                         })
                         new_in_pass += 1
-                        print(f"[LinkedIn] > Post: {author[:20]}")
+                        total_posts_extracted += 1 # Contamos POSTS
+                        print(f"[LinkedIn] > Post: {author[:20]} ({total_posts_extracted}/{target_count})")
 
                         # -- APERTURA DE COMENTARIOS --
                         comments_opened = False
@@ -309,10 +309,8 @@ def scrape_linkedin(topic, email, password, target_count=10):
                                         "comment_author": "LinkedIn User", 
                                         "comment_content": clean
                                     })
-                                    total_comments_extracted += 1
                                     comments_found_now += 1
-                                    if total_comments_extracted >= target_count: break
-                            
+                                    
                             if comments_found_now > 0:
                                 print(f"   [LinkedIn] + {comments_found_now} comentarios extraídos.")
 

@@ -33,8 +33,12 @@ def worker(platform, topic, creds, limit=15):
         # Permitimos ejecutar aunque no haya user explícito, confiando en cookies
         data = scrape_twitter(topic, t_user, creds['password'], target_count=limit)
     elif platform == "linkedin":
-        if creds['email'] or True: # Permitir intento con cookies guardadas
-            data = scrape_linkedin(topic, creds['email'], creds['password'], target_count=limit)
+        if creds['email'] or True: 
+            # Multiplicador x5 para LinkedIn: Como tiene pocos comentarios por post,
+            # traemos más posts para equilibrar el volumen de datos con otras redes.
+            li_limit = limit * 5
+            print(f"[{platform}] Ajustando meta a {li_limit} posts (x5) para compensar volumen.")
+            data = scrape_linkedin(topic, creds['email'], creds['password'], target_count=li_limit)
     elif platform == "instagram":
         i_user = creds.get('username') or creds.get('email')
         data = scrape_instagram(topic, i_user, creds['password'], target_count=limit)
@@ -119,16 +123,18 @@ if __name__ == "__main__":
         df = pd.DataFrame(all_data)
 
         # ---------------------------------------------------------
-        # FASE 2: PROCESAMIENTO CON LLMs (Práctica 06)
+        # FASE 2: PROCESAMIENTO CON LLMs 
         # ---------------------------------------------------------
-        try:
-            from llm_processor import process_dataframe_concurrently
-            print("\n[INFO] Iniciando Fase 2: Clasificación de Sentimiento con LLMs...")
-            df = process_dataframe_concurrently(df)
-            print("[INFO] Fase 2 completada.")
-        except Exception as e:
-            print(f"\n[WARN] No se pudo ejecutar el análisis de LLMs: {e}")
-            print("Continuando con la exportación solo de datos scrapeados...")
+        if False: # SALTAMOS LLMS POR AHORA
+            try:
+                from llm_processor import process_dataframe_concurrently
+                print("\n[INFO] Iniciando Fase 2: Clasificación de Sentimiento con LLMs...")
+                df = process_dataframe_concurrently(df)
+                print("[INFO] Fase 2 completada.")
+            except Exception as e:
+                print(f"\n[WARN] No se pudo ejecutar el análisis de LLMs: {e}")
+        else:
+             print("\n[INFO] Fase 2 (LLMs) SALTADA. Guardando datos crudos...")
 
         # Reorder columns if desired
         # Expected columns: platform, post_index, post_author, post_content, comment_author, comment_content, sentiment_llm, explanation_llm

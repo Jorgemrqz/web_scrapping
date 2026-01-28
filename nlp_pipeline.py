@@ -61,13 +61,16 @@ def clean_text(text):
     # 5. Eliminar espacios extra
     text = re.sub(r'\s+', ' ', text).strip()
     
+    # FILTRO DURO: borrar 'nan' literal
+    if text == "nan": return ""
+    
     return text
 
 def process_nlp(posts):
     # Inicializar herramientas
     stop_words = set(stopwords.words('spanish'))
     # Agregar stopwords 
-    stop_words.update(["si", "q", "ma", "pa", "ver", "mas", "va", "ser", "hacer", "linkedin", "twitter", "facebook"])
+    stop_words.update(["si", "q", "ma", "pa", "ver", "mas", "va", "ser", "hacer", "linkedin", "twitter", "facebook", "nan"])
     
     stemmer = SnowballStemmer('spanish')
     
@@ -77,8 +80,17 @@ def process_nlp(posts):
     print("[NLP] Procesando textos...")
     
     for post in posts:
-        original = post.get('content', '') or post.get('text', '')
-        if not original:
+        # Combinar contenido de post y comentario si existen
+        p_text = str(post.get('post_content', ''))
+        c_text = str(post.get('comment_content', ''))
+        
+        # Fallback a claves viejas
+        if not p_text and not c_text:
+             original = str(post.get('content', '') or post.get('text', ''))
+        else:
+             original = p_text + " " + c_text
+
+        if not original or original.lower() == "nan":
             continue
             
         # 1. Limpieza
