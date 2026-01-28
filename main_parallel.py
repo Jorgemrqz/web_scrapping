@@ -29,11 +29,9 @@ def worker(platform, topic, creds, limit=15):
     if platform == "facebook":
         data = scrape_facebook(topic, creds['email'], creds['password'], target_count=limit)
     elif platform == "twitter":
-        t_user = creds.get('email') or creds.get('username')
-        if t_user:
-            data = scrape_twitter(topic, t_user, creds['password'], target_count=limit)
-        else:
-            print(f"[{platform}] Salteando (sin credenciales)")
+        t_user = creds.get('email') or creds.get('username') or "CookieSession"
+        # Permitimos ejecutar aunque no haya user explícito, confiando en cookies
+        data = scrape_twitter(topic, t_user, creds['password'], target_count=limit)
     elif platform == "linkedin":
         if creds['email'] or True: # Permitir intento con cookies guardadas
             data = scrape_linkedin(topic, creds['email'], creds['password'], target_count=limit)
@@ -88,9 +86,8 @@ if __name__ == "__main__":
     # Tarea Facebook
     tasks.append(pool.apply_async(worker, ("facebook", topic, CREDENTIALS["facebook"], limit)))
     
-    # Tarea Twitter
-    if CREDENTIALS["twitter"]["username"]:
-        tasks.append(pool.apply_async(worker, ("twitter", topic, CREDENTIALS["twitter"], limit)))
+    # Tarea Twitter (Siempre intentar, puede tener cookies)
+    tasks.append(pool.apply_async(worker, ("twitter", topic, CREDENTIALS["twitter"], limit)))
 
     # Tarea LinkedIn
     # Se añade siempre, el worker decide si tiene credenciales o intenta con cookies
@@ -110,13 +107,11 @@ if __name__ == "__main__":
     pool.close()
     pool.join()
     
-    # Guardar Corpus JSON
+    # Guardar Corpus (CSV Directo)
     os.makedirs("data", exist_ok=True)
-    json_filename = f"data/corpus_{topic}.json"
-    with open(json_filename, "w", encoding="utf-8") as f:
-        json.dump(all_data, f, ensure_ascii=False, indent=4)
-        
-    print(f"\n[Terminado] Se han guardado {len(all_data)} registros en {json_filename}")
+    # Bloque JSON removido a petición
+    
+    print(f"\n[Terminado] Se han recolectado {len(all_data)} registros.")
 
     # exportar a Excel / CSV
     if all_data:

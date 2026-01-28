@@ -77,6 +77,11 @@ def ensure_login(page, username: str, password: str) -> bool:
     human_delay()
     if "login" not in page.url and page.locator("input[autocomplete='username']").count() == 0:
         return True
+    
+    # Si es cookie session, no intentamos escribir
+    if "CookieSession" in username:
+        return True
+        
     if username:
         try:
             user_field = page.locator("input[autocomplete='username']").first
@@ -115,11 +120,11 @@ def scrape_conversation(context, url: str) -> Dict[str, List[Dict[str, str]]]:
         human_delay(1.5)
         convo_page.goto(url, wait_until="domcontentloaded")
         
-        # DEBUG: Screenshot para ver qué pasa
-        safe_name = url.split('/')[-1]
-        try:
-            convo_page.screenshot(path=f"debug_tweet_{safe_name}.png")
-        except: pass
+        # DEBUG: Screenshot desactivado
+        # safe_name = url.split('/')[-1]
+        # try:
+        #     convo_page.screenshot(path=f"debug_tweet_{safe_name}.png")
+        # except: pass
         try:
              convo_page.wait_for_selector('article', timeout=15000)
         except: 

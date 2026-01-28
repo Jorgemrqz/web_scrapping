@@ -42,6 +42,9 @@ def load_data(data_dir="data", topic=None):
     return all_posts
 
 def clean_text(text):
+    # Asegurar string
+    text = str(text) if text is not None else ""
+    
     # 1. Convertir a minúsculas
     text = text.lower()
     

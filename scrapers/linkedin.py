@@ -167,7 +167,7 @@ def scrape_linkedin(topic, email, password, target_count=10):
                         try:
                             time.sleep(2)
                             
-                            js_script = """
+                            js_script = r"""
                                 () => {
                                     const extracted = [];
                                     const actionKeywords = ['responder', 'reply', 'recomendar', 'like', 'gostar', 'interesante'];
