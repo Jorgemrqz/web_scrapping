@@ -107,16 +107,69 @@ def scrape_linkedin(topic, email, password, target_count=10):
                         for l in lines:
                             l = l.strip()
                             # Filtros nombre autor
-                            if len(l) > 2 and "Publicación" not in l and "seguidores" not in l and "minutos" not in l and "horas" not in l:
+                            if len(l) > 2 and "Publicación" not in l and "seguidores" not in l and "minutos" not in l and "horas" not in l and "relevantes" not in l.lower() and "relevant" not in l.lower():
                                 author = l
                                 break
                         
-                        post_clean = full_txt.split("Recomendar")[0].replace("\n", " ").strip()
+                        # Limpieza profunda del Post
+                        raw_text = full_txt
                         
+                        # 1. Cortar pie de página (Botones de acción)
+                        # Intentamos varios splitters comunes
+                        for splitter in ["Recomendar", "recomendar", "Like", "Gostar"]:
+                            if splitter in raw_text:
+                                raw_text = raw_text.split(splitter)[0]
+                                break
+                        
+                        # 2. Cortar Cabecera (Bio, Tiempo, Botón Seguir)
+                        header_cut = False
+                        if "Seguir" in raw_text[:800]:
+                            parts = raw_text.split("Seguir", 1)
+                            if len(parts) > 1: raw_text = parts[1]; header_cut = True
+                        elif "Follow" in raw_text[:800]:
+                            parts = raw_text.split("Follow", 1)
+                            if len(parts) > 1: raw_text = parts[1]; header_cut = True
+                        
+                        # Fallback: Si no cortamos por "Seguir", usamos Regex de tiempo (Ej: "5 d •", "23 h •", "1 sem •")
+                        if not header_cut:
+                            # Busca patrón: digitos + espacios + (d/h/m/s/sem/yr) + espacios + opcional(•)
+                            # Ejemplos que atrapa: "5 días", "2 h", "1 semana •"
+                            match = re.search(r'\b\d+\s+(días|dí|d|h|HORAS|m|min|minutos|sem|semanas|w|y|año|años)\s*•?', raw_text[:800], re.IGNORECASE)
+                            if match:
+                                # Cortamos justo después del match
+                                raw_text = raw_text[match.end():]
+                                header_cut = True
+
+                        # 3. Limpieza de frases basura específicas
+                        replacements = [
+                            ("Publicación en el feed", ""), ("Post in feed", ""),
+                            ("Mostrar traducción", ""), ("Show translation", ""),
+                            ("… más", ""), ("... more", ""), ("… ver más", ""),
+                            ("Estado del botón de reacción:", ""),
+                            ("Editado", ""), ("Edited", "")
+                        ]
+                        for old, new in replacements:
+                            raw_text = raw_text.replace(old, new)
+
+                        post_clean = raw_text.replace("\n", " ").strip()
+                        
+                        # 4. Limpieza final: Si empieza con el nombre del autor (residuo), lo quitamos
+                        if post_clean.startswith(author):
+                            post_clean = post_clean[len(author):].strip()
+                        
+                        # Limpieza extra de UI (Filtros anteriores)
+                        
+                        # Limpieza extra de UI (Filtros anteriores)
+                        if post_clean.startswith("Más relevantes"): post_clean = post_clean.replace("Más relevantes", "", 1).strip()
+                        if post_clean.startswith("Most relevant"): post_clean = post_clean.replace("Most relevant", "", 1).strip()
+                        
+                        # Guardar Post (Fila Padre)
                         results.append({
-                            "source": "LinkedIn", "type": "post", 
-                            "author": author[:50], 
-                            "content": post_clean
+                            "platform": "LinkedIn",
+                            "post_author": author[:50], 
+                            "post_content": post_clean,
+                            "comment_author": "",
+                            "comment_content": ""
                         })
                         new_in_pass += 1
                         print(f"[LinkedIn] > Post: {author[:20]}")
@@ -148,19 +201,29 @@ def scrape_linkedin(topic, email, password, target_count=10):
                         except Exception as e:
                             pass
                         
-                        # Cargar más (Botoneras de paginación de comentarios)
+                        # Cargar más (Botoneras de paginación de comentarios) - REFUGIO MÁS AGRESIVO
                         try:
-                            # Buscamos botones "Ver más" DENTRO del post actual para no clickar otros
-                            more_btns = post_item.locator('button').filter(
-                                has_text=re.compile(r"ver\s+más|load\s+more|mostrar\s+más|show\s+more|anteriores", re.IGNORECASE)
-                            )
-                            if more_btns.count() > 0:
-                                # A veces hay varios, clickamos todos con cuidado
-                                for mb_idx in range(min(3, more_btns.count())):
+                            # Intentamos hasta 10 veces expandir comentarios (antes era 3)
+                            for _ in range(5): # Pasadas de expansión
+                                more_btns = post_item.locator('button').filter(
+                                    has_text=re.compile(r"ver\s+más|load\s+more|mostrar\s+más|show\s+more|anteriores|previous", re.IGNORECASE)
+                                )
+                                count_m = more_btns.count()
+                                if count_m == 0: break
+                                
+                                # Clickar todos los visibles
+                                clicked_any = False
+                                for mb_idx in range(count_m):
                                     mb = more_btns.nth(mb_idx)
                                     if mb.is_visible():
                                         mb.click(force=True)
-                                        time.sleep(1)
+                                        clicked_any = True
+                                        time.sleep(0.5)
+                                
+                                if not clicked_any: break
+                                time.sleep(1.5) # Esperar carga
+                                # Pequeño scroll para activar lazy load
+                                page.mouse.wheel(0, 100)
                         except: pass
 
                         # -- EXTRACCIÓN VIA JAVASCRIPT REFORZADA --
@@ -233,15 +296,18 @@ def scrape_linkedin(topic, email, password, target_count=10):
                                 # Check duplicados ya existentes
                                 is_dup = False
                                 for r in results:
-                                    if r['content'] == clean or (len(clean) > 15 and clean in r['content']): 
+                                    c_existing = r.get('comment_content', '')
+                                    if c_existing and (c_existing == clean or (len(clean) > 15 and clean in c_existing)): 
                                         is_dup = True; break
                                 
                                 if not is_dup:
+                                    # Guardar Comentario con CONTEXTO del Post padre
                                     results.append({
-                                        "source": "LinkedIn", 
-                                        "type": "comment", 
-                                        "author": "LinkedIn User", 
-                                        "content": clean
+                                        "platform": "LinkedIn",
+                                        "post_author": author[:50], # Autor del post original
+                                        "post_content": post_clean,
+                                        "comment_author": "LinkedIn User", 
+                                        "comment_content": clean
                                     })
                                     total_comments_extracted += 1
                                     comments_found_now += 1

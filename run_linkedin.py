@@ -4,11 +4,11 @@ import os
 # Asegurar que podemos importar desde el directorio actual
 sys.path.append(os.getcwd())
 
-from scrapers.linkedin_v1 import scrape_linkedin
+from scrapers.linkedin import scrape_linkedin
 from config import CREDENTIALS, DEFAULT_TOPIC
 
 def main():
-    print("--- Iniciando Ejecución Aislada de LinkedIn V1 ---")
+    print("--- Iniciando Ejecución LinkedIn Scraper ---")
     
     # Obtener credenciales
     li_creds = CREDENTIALS.get("linkedin", {})
@@ -26,13 +26,13 @@ def main():
     print("Iniciando scraper...")
     
     # Ejecutar función importada
-    results = scrape_linkedin(topic, email, password, target_count=5) # Probamos con 5 items para test rápido
+    results = scrape_linkedin(topic, email, password, target_count=50) 
     
     print("\n--- Resultados Obtenidos ---")
     if results:
         import pandas as pd
         df = pd.DataFrame(results)
-        output_csv = "test_linkedin_v1.csv"
+        output_csv = "test_linkedin.csv"
         df.to_csv(output_csv, index=False, encoding='utf-8-sig')
         print(f"Resultados guardados en: {output_csv}")
     
