@@ -23,4 +23,8 @@ debug_*.png
 
 .venv/
 
+*.csv
+
+test_deepseek_cost.py
+
 chrome_debug_profile/

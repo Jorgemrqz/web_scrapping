@@ -90,20 +90,23 @@ def main():
         print("Todo está procesado. ¡Listo!")
         return
 
+    import time
     # Función wrapper para procesar y devolver índice
     def process_wrapper(idx_row_tuple):
         idx, row = idx_row_tuple
         result = processor.analyze_row(row)
+        # Pausa de seguridad para evitar Rate Limit (429) en el remate final
+        time.sleep(2) 
         return idx, result
 
     # Lista de tuplas (índice, fila) solo de las pendientes
     rows_to_process = [(i, df_input.iloc[i]) for i in indices_to_process]
 
-    print("Iniciando procesamiento incremental con autoguardado...")
+    print("Iniciando procesamiento (Modo Seguro: 1 hilo + pausa)...")
     batch_size = 10 # Guardar cada 10 filas
     results_buffer = []
     
-    with ThreadPoolExecutor(max_workers=2) as executor: # Reducido a 2 para evitar Rate Limit de Groq
+    with ThreadPoolExecutor(max_workers=1) as executor: # Secuencial puro para finalizar sin errores
         # Usamos tqdm
         iterator = tqdm(executor.map(process_wrapper, rows_to_process), total=len(rows_to_process), unit="posts")
         

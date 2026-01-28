@@ -145,7 +145,7 @@ class LLMProcessor:
         try:
             client = Groq(api_key=GROQ_API_KEY)
             completion = client.chat.completions.create(
-                model="llama3-8b-8192", # Modelo 8B: Más rápido y con cuota separada
+                model="llama-3.1-8b-instant", # Modelo 8B actual y rápido
                 messages=[
                     {"role": "system", "content": self.system_prompt + "\n\nIMPORTANTE: Responde ÚNICAMENTE con el objeto JSON válido. No incluyas bloques de código markdown ```json ... ```, solo el JSON puro."},
                     {"role": "user", "content": text}
@@ -185,8 +185,8 @@ class LLMProcessor:
         if is_fb:
             return self.analyze_with_openai(content)
         elif is_ig:
-            # CAMBIO: Usamos Llama 3 en lugar de Gemini
-            return self.analyze_with_llama(content)
+            # INSTAGRAM -> DeepSeek
+            return self.analyze_with_deepseek(content)
         elif is_x:
             return self.analyze_with_grok(content)
         elif is_li:
@@ -202,7 +202,8 @@ class LLMProcessor:
                 if parts:
                     content = " | ".join(parts)
             
-            return self.analyze_with_deepseek(content)
+            # LINKEDIN -> Llama 3 (Groq)
+            return self.analyze_with_llama(content)
         else:
             return {"sentiment": "N/A", "explanation": f"Plataforma desconocida: {platform}/{source}"}
 
