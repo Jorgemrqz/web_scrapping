@@ -36,7 +36,7 @@ def worker(platform, topic, creds, limit=15):
         if creds['email'] or True: 
             # Multiplicador x5 para LinkedIn: Como tiene pocos comentarios por post,
             # traemos más posts para equilibrar el volumen de datos con otras redes.
-            li_limit = limit * 5
+            li_limit = limit * 1
             print(f"[{platform}] Ajustando meta a {li_limit} posts (x5) para compensar volumen.")
             data = scrape_linkedin(topic, creds['email'], creds['password'], target_count=li_limit)
     elif platform == "instagram":
@@ -123,9 +123,19 @@ if __name__ == "__main__":
         df = pd.DataFrame(all_data)
 
         # ---------------------------------------------------------
+        # FASE 1.5: GUARDADO INTERMEDIO (SEGURIDAD)
+        # ---------------------------------------------------------
+        try:
+            raw_csv_name = f"corpus_{topic}_raw.csv"
+            df.to_csv(os.path.join("data", raw_csv_name), index=False, encoding='utf-8-sig')
+            print(f"[Backup] Datos crudos guardados en: {raw_csv_name}")
+        except Exception as e:
+            print(f"[Backup Error] No se pudo guardar copia de seguridad: {e}")
+
+        # ---------------------------------------------------------
         # FASE 2: PROCESAMIENTO CON LLMs 
         # ---------------------------------------------------------
-        if False: # SALTAMOS LLMS POR AHORA
+        if True: # ACTIVAMOS LLMS
             try:
                 from llm_processor import process_dataframe_concurrently
                 print("\n[INFO] Iniciando Fase 2: Clasificación de Sentimiento con LLMs...")

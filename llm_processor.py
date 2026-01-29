@@ -1,22 +1,15 @@
 import os
 import json
-import time
-import requests
-import google.generativeai as genai
-from openai import OpenAI
-from groq import Groq
 import pandas as pd
+from openai import OpenAI
 from concurrent.futures import ThreadPoolExecutor
+from tqdm import tqdm
 
-# Importar claves desde config (Las añadiremos luego)
+# Importar claves desde config
 try:
-    from config import OPENAI_API_KEY, GEMINI_API_KEY, GROK_API_KEY, DEEPSEEK_API_KEY, GROQ_API_KEY
+    from config import DEEPSEEK_API_KEY
 except ImportError:
-    OPENAI_API_KEY = ""
-    GEMINI_API_KEY = ""
-    GROK_API_KEY = ""
     DEEPSEEK_API_KEY = ""
-    GROQ_API_KEY = ""
 
 class LLMProcessor:
     def __init__(self):
@@ -35,75 +28,6 @@ class LLMProcessor:
         except:
             return {"sentiment": "Error", "explanation": "Falló el parsing JSON: " + text[:50]}
 
-    # --- 1. FACEBOOK -> OPENAI ---
-    def analyze_with_openai(self, text):
-        if not OPENAI_API_KEY: return {"sentiment": "N/A", "explanation": "Falta OPENAI_API_KEY"}
-        try:
-            client = OpenAI(api_key=OPENAI_API_KEY)
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": f"Texto: {text}"}
-                ],
-                temperature=0
-            )
-            return self._safe_json_parse(response.choices[0].message.content)
-        except Exception as e:
-            return {"sentiment": "Error", "explanation": str(e)}
-
-    # --- 2. INSTAGRAM -> GEMINI ---
-    def analyze_with_gemini(self, text):
-        if not GEMINI_API_KEY: return {"sentiment": "N/A", "explanation": "Falta GEMINI_API_KEY"}
-        try:
-            # Uso directo de API REST para evitar conflictos de librería obsoleta
-            import requests
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
-            
-            headers = {'Content-Type': 'application/json'}
-            data = {
-                "contents": [{
-                    "parts": [{"text": f"{self.system_prompt}\n\nTexto a analizar: {text}"}]
-                }]
-            }
-            
-            response = requests.post(url, headers=headers, json=data)
-            
-            if response.status_code != 200:
-                return {"sentiment": "Error", "explanation": f"Gemini Error {response.status_code}: {response.text}"}
-                
-            result_json = response.json()
-            # Extraer texto de la respuesta
-            try:
-                candidate_text = result_json['candidates'][0]['content']['parts'][0]['text']
-                return self._safe_json_parse(candidate_text)
-            except (KeyError, IndexError) as e:
-                 return {"sentiment": "Error", "explanation": f"Estructura inesperada de Gemini: {str(e)}"}
-
-        except Exception as e:
-            return {"sentiment": "Error", "explanation": str(e)}
-
-    # --- 3. X (TWITTER) -> GROK (xAI) ---
-    def analyze_with_grok(self, text):
-        if not GROK_API_KEY: return {"sentiment": "N/A", "explanation": "Falta GROK_API_KEY"}
-        try:
-            # xAI (Grok) es compatible con el SDK de OpenAI
-            # Usamos la URL de INFERENCIA
-            client = OpenAI(api_key=GROK_API_KEY, base_url="https://api.x.ai/v1")
-            
-            response = client.chat.completions.create(
-                model="grok-4-latest", # Modelo actualizado por el usuario
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": text}
-                ],
-                temperature=0
-            )
-            return self._safe_json_parse(response.choices[0].message.content)
-        except Exception as e:
-            return {"sentiment": "Error", "explanation": f"Grok Error: {str(e)}"}
-
-    # --- 4. LINKEDIN -> DEEPSEEK ---
     def analyze_with_deepseek(self, text):
         if not DEEPSEEK_API_KEY: return {"sentiment": "N/A", "explanation": "Falta DEEPSEEK_API_KEY"}
         try:
@@ -115,54 +39,26 @@ class LLMProcessor:
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": f"Texto: {text}"}
                 ],
-                temperature=0
-            )
-            return self._safe_json_parse(response.choices[0].message.content)
-        except Exception as e:
-            return {"sentiment": "Error", "explanation": str(e)}
-
-    # --- 5. INSTAGRAM -> LLAMA 3 (Groq) ---
-    def analyze_with_llama(self, text):
-        if not GROQ_API_KEY: return {"sentiment": "N/A", "explanation": "Falta GROQ_API_KEY"}
-        try:
-            client = Groq(api_key=GROQ_API_KEY)
-            completion = client.chat.completions.create(
-                model="llama-3.3-70b-versatile", # Modelo muy potente y rápido
-                messages=[
-                    {"role": "system", "content": self.system_prompt + "\n\nIMPORTANTE: Responde ÚNICAMENTE con el objeto JSON válido. No incluyas bloques de código markdown ```json ... ```, solo el JSON puro."},
-                    {"role": "user", "content": text}
-                ],
                 temperature=0,
-                response_format={"type": "json_object"} # Forzar JSON puro
+                max_tokens=200 
             )
-            return self._safe_json_parse(completion.choices[0].message.content)
-        except Exception as e:
-            return {"sentiment": "Error", "explanation": f"Llama Error: {str(e)}"}
+            
+            # Capturar uso de tokens
+            usage = response.usage
+            total_tokens = usage.total_tokens
+            
+            result = self._safe_json_parse(response.choices[0].message.content)
+            # Inyectar tokens en el resultado
+            if isinstance(result, dict):
+                result['tokens'] = total_tokens
+            return result
 
-    # --- 5. INSTAGRAM -> LLAMA 3 (Groq) ---
-    def analyze_with_llama(self, text):
-        if not GROQ_API_KEY: return {"sentiment": "N/A", "explanation": "Falta GROQ_API_KEY"}
-        try:
-            client = Groq(api_key=GROQ_API_KEY)
-            completion = client.chat.completions.create(
-                model="llama-3.1-8b-instant", # Modelo 8B actual y rápido
-                messages=[
-                    {"role": "system", "content": self.system_prompt + "\n\nIMPORTANTE: Responde ÚNICAMENTE con el objeto JSON válido. No incluyas bloques de código markdown ```json ... ```, solo el JSON puro."},
-                    {"role": "user", "content": text}
-                ],
-                temperature=0,
-                response_format={"type": "json_object"} # Forzar JSON puro
-            )
-            return self._safe_json_parse(completion.choices[0].message.content)
         except Exception as e:
-            return {"sentiment": "Error", "explanation": f"Llama Error: {str(e)}"}
+            return {"sentiment": "Error", "explanation": str(e), "tokens": 0}
 
     # --- RUTER PRINCIPAL ---
     def analyze_row(self, row):
-        # Convertir a string para evitar error con NaN (float)
-        platform = str(row.get('platform', '')).lower()
-        source = str(row.get('source', '')).lower()
-        
+        # ... (código previo omitido para brevedad, no cambia lógica de limpieza) ...
         # Combinamos contenido de post y comentario si existe, asegurando string
         p_content = str(row.get('post_content', ''))
         c_content = str(row.get('comment_content', ''))
@@ -172,42 +68,22 @@ class LLMProcessor:
              content = str(row.get('content', ''))
         else:
              content = f"Post: {p_content} | Comment: {c_content}"
+             
+        # Lógica especial para LinkedIn (filas desplazadas) que queríamos conservar
+        if len(content) < 5 or "nan" in content.lower():
+            parts = []
+            for val in row.values:
+                s_val = str(val).strip()
+                if s_val and s_val.lower() not in ['nan', 'none', '', 'linkedin', 'post', 'comment', 'objetivo']:
+                    parts.append(s_val)
+            if parts:
+                content = " | ".join(parts)
         
-        # Limitar longitud
-        content = content[:500] 
+        # Limitar longitud para ahorrar tokens y evitar errores
+        content = content[:1000] 
 
-        # Lógica de detección reforzada
-        is_fb = 'facebook' in platform or 'facebook' in source
-        is_ig = 'instagram' in platform or 'instagram' in source
-        is_x = 'x' in platform or 'twitter' in platform or 'twitter' in source
-        is_li = 'linkedin' in platform or 'linkedin' in source
-
-        if is_fb:
-            return self.analyze_with_openai(content)
-        elif is_ig:
-            # INSTAGRAM -> DeepSeek
-            return self.analyze_with_deepseek(content)
-        elif is_x:
-            return self.analyze_with_grok(content)
-        elif is_li:
-            # Fallback inteligente para LinkedIn (filas desplazadas)
-            if len(content) < 5 or "nan" in content.lower():
-                # Unir todo lo que no sea nulo ni palabras clave de estructura
-                parts = []
-                for val in row.values:
-                    s_val = str(val).strip()
-                    if s_val and s_val.lower() not in ['nan', 'none', '', 'linkedin', 'post', 'comment', 'objetivo']:
-                        parts.append(s_val)
-                # Si recuperamos algo, lo usamos
-                if parts:
-                    content = " | ".join(parts)
-            
-            # LINKEDIN -> Llama 3 (Groq)
-            return self.analyze_with_llama(content)
-        else:
-            return {"sentiment": "N/A", "explanation": f"Plataforma desconocida: {platform}/{source}"}
-
-from tqdm import tqdm
+        # AHORA SIEMPRE USAMOS DEEPSEEK
+        return self.analyze_with_deepseek(content)
 
 def process_dataframe_concurrently(df):
     processor = LLMProcessor()
@@ -215,15 +91,17 @@ def process_dataframe_concurrently(df):
     # Lista de resultados
     sentiments = []
     explanations = []
+    tokens_usage = []
     
-    print(f"Iniciando análisis CONCURRENTE de {len(df)} registros con 4 LLMs...")
+    print(f"Iniciando análisis CONCURRENTE de {len(df)} registros con DEEPSEEK EXCLUSIVAMENTE...")
     
     # Convertimos a lista de diccionarios para iterar
     rows = [row for _, row in df.iterrows()]
     
     results = []
     # ThreadPool para hacer peticiones HTTP concurrentes
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    # DeepSeek NO tiene Rate Limit estricto. Subimos workers para mayor velocidad.
+    with ThreadPoolExecutor(max_workers=20) as executor:
         # Usamos tqdm para barra de progreso sobre el iterador de resultados
         for res in tqdm(executor.map(processor.analyze_row, rows), total=len(rows), unit="posts"):
             results.append(res)
@@ -232,7 +110,34 @@ def process_dataframe_concurrently(df):
     for res in results:
         sentiments.append(res.get('sentiment', 'Error'))
         explanations.append(res.get('explanation', ''))
+        tokens_usage.append(res.get('tokens', 0))
         
     df['sentiment_llm'] = sentiments
     df['explanation_llm'] = explanations
+    df['tokens_llm'] = tokens_usage
+    
+    total_tokens = sum(tokens_usage)
+    print(f"\n[Resumen] Total Tokens consumidos: {total_tokens}")
+    print(f"         Promedio por post: {total_tokens/len(df):.1f}")
+    
     return df
+
+if __name__ == "__main__":
+    # Bloque de prueba para ejecutar directamente
+    # Intenta buscar un csv reciente en 'data' si existe, para prueba rápida
+    target = "data/corpus_Venezuela.csv" # Default
+    
+    if os.path.exists(target):
+        print(f"Probando con {target}...")
+        try:
+            df = pd.read_csv(target, sep=',', on_bad_lines='skip', encoding='utf-8')
+            # Si falló la carga (columna única), reintentar punto y coma
+            if len(df.columns) < 2:
+                 df = pd.read_csv(target, sep=';', on_bad_lines='skip', encoding='utf-8')
+
+            df_sample = df.head(3) # Prueba ultra rápida
+            print("Procesando 3 filas de prueba...")
+            res = process_dataframe_concurrently(df_sample)
+            print(res[['sentiment_llm', 'explanation_llm']])
+        except Exception as e:
+            print(e)
