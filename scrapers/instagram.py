@@ -14,7 +14,7 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
     - topic: Hashtag (sin #)
     - target_count: Cantidad de POSTS a analizar (no comentarios totales)
     """
-    user_data_dir = os.path.join(os.getcwd(), "auth_profile_instagram")
+    user_data_dir = os.path.join(os.getcwd(), "profiles", "auth_profile_instagram")
     os.makedirs(user_data_dir, exist_ok=True)
 
     hashtag = topic.strip().lstrip("#").replace(" ", "").lower()

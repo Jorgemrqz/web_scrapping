@@ -10,7 +10,7 @@ def scrape_facebook(topic, email, password, target_count=10):
     print(f"[Facebook] Iniciando hilo para: {topic} | Meta: {target_count}")
     
     # Ruta para guardar el perfil de usuario (cookies, cache, etc)
-    user_data_dir = os.path.join(os.getcwd(), "auth_profile")
+    user_data_dir = os.path.join(os.getcwd(), "profiles", "auth_profile")
     
     with sync_playwright() as p:
         # Usar contexto persistente para guardar la sesión

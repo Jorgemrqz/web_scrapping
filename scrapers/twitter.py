@@ -293,7 +293,7 @@ def scrape_twitter(topic: str, username: str, password: str, target_count: int =
     if config.X_PROFILE_PATH:
         user_data_dir = config.X_PROFILE_PATH
     else:
-        user_data_dir = os.path.join(os.getcwd(), "auth_profile_x")
+        user_data_dir = os.path.join(os.getcwd(), "profiles", "auth_profile_x")
         os.makedirs(user_data_dir, exist_ok=True)
 
     with sync_playwright() as p:

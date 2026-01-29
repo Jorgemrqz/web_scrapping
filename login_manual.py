@@ -55,8 +55,8 @@ def manual_login(
         # Solo usar config.X_PROFILE_PATH si estamos en X
         user_data_dir = config.X_PROFILE_PATH
     else:
-        # Por defecto usar el directorio del mapa (ej. auth_profile_linkedin)
-        user_data_dir = os.path.join(os.getcwd(), profile_dir)
+        # Por defecto usar el directorio del mapa (ej. auth_profile_linkedin) dentro de 'profiles'
+        user_data_dir = os.path.join(os.getcwd(), "profiles", profile_dir)
 
     os.makedirs(user_data_dir, exist_ok=True)
 

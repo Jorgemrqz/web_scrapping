@@ -157,13 +157,13 @@ if __name__ == "__main__":
         # Export
         print("Exporting data...")
 
-        # 1. Excel (requires openpyxl)
-        try:
-            excel_name = f"corpus_{topic}.xlsx"
-            df.to_excel(os.path.join("data", excel_name), index=False)
-            print(f"Saved Excel: {excel_name}")
-        except Exception as e:
-            print(f"Could not save Excel: {e}")
+        # 1. Excel (requires openpyxl) -- DESACTIVADO POR PETICIÓN
+        # try:
+        #     excel_name = f"corpus_{topic}.xlsx"
+        #     df.to_excel(os.path.join("data", excel_name), index=False)
+        #     print(f"Saved Excel: {excel_name}")
+        # except Exception as e:
+        #     print(f"Could not save Excel: {e}")
 
         # 2. CSV
         try:
