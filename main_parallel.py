@@ -2,48 +2,132 @@ import multiprocessing
 import json
 import os
 from datetime import datetime
+import pandas as pd
+
 from scrapers.facebook import scrape_facebook
 from scrapers.twitter import scrape_twitter
 from scrapers.linkedin import scrape_linkedin
 from scrapers.instagram import scrape_instagram
 import nlp_pipeline
-
+from llm_processor import process_dataframe_concurrently
 import config
 
 # Configuración (En un caso real, usar variables de entorno)
-CREDENTIALS = {
-    "facebook": {"email": "", "password": ""},
-    "twitter": {"username": "", "password": ""},
-    "linkedin": {"email": "", "password": ""},
-    "instagram": {"username": "", "password": ""},
-}
-
-import pandas as pd
+CREDENTIALS = config.CREDENTIALS
 
 def worker(platform, topic, creds, limit=15):
     """ Función wrapper para el proceso paralelo """
+    # Nota: Si se llama desde API, multiprocessing puede tener problemas con prints,
+    # pero lo dejaremos para debugging.
     start_time = datetime.now().strftime("%H:%M:%S")
     print(f"[{start_time}] --- Iniciando Worker: {platform} (Meta: {limit}) ---")
     data = []
     
-    if platform == "facebook":
-        data = scrape_facebook(topic, creds['email'], creds['password'], target_count=limit)
-    elif platform == "twitter":
-        t_user = creds.get('email') or creds.get('username') or "CookieSession"
-        # Permitimos ejecutar aunque no haya user explícito, confiando en cookies
-        data = scrape_twitter(topic, t_user, creds['password'], target_count=limit)
-    elif platform == "linkedin":
-        if creds['email'] or True: 
-            # Multiplicador x5 para LinkedIn: Como tiene pocos comentarios por post,
-            # traemos más posts para equilibrar el volumen de datos con otras redes.
+    try:
+        if platform == "facebook":
+            data = scrape_facebook(topic, creds['email'], creds['password'], target_count=limit)
+        elif platform == "twitter":
+            t_user = creds.get('email') or creds.get('username') or "CookieSession"
+            data = scrape_twitter(topic, t_user, creds['password'], target_count=limit)
+        elif platform == "linkedin":
             li_limit = limit * 1
             print(f"[{platform}] Ajustando meta a {li_limit} posts (x5) para compensar volumen.")
             data = scrape_linkedin(topic, creds['email'], creds['password'], target_count=li_limit)
-    elif platform == "instagram":
-        i_user = creds.get('username') or creds.get('email')
-        data = scrape_instagram(topic, i_user, creds['password'], target_count=limit)
+        elif platform == "instagram":
+            i_user = creds.get('username') or creds.get('email')
+            data = scrape_instagram(topic, i_user, creds['password'], target_count=limit)
+    except Exception as e:
+        print(f"[Error Worker {platform}] {e}")
+        # Retornamos lista vacía en caso de error para no romper todo
+        return []
     
     return data
+
+def run_pipeline(topic: str, limit: int = 10):
+    """
+    Función orquestadora principal.
+    Scraping -> LLM Processing -> NLP Pipeline -> CSV Export
+    Retorna: Ruta del CSV generado o None si falla.
+    """
+    print(f"\n[Orquestador] Iniciando extracción PARALELA para '{topic}' (Límite: {limit})...")
+    
+    # Crear procesos
+    pool = multiprocessing.Pool(processes=4) # Número de redes a scrapear
+    
+    tasks = []
+    # Tarea Facebook
+    tasks.append(pool.apply_async(worker, ("facebook", topic, CREDENTIALS["facebook"], limit)))
+    
+    # Tarea Twitter
+    tasks.append(pool.apply_async(worker, ("twitter", topic, CREDENTIALS["twitter"], limit)))
+
+    # Tarea LinkedIn
+    tasks.append(pool.apply_async(worker, ("linkedin", topic, CREDENTIALS["linkedin"], limit)))
+
+    # Tarea Instagram
+    tasks.append(pool.apply_async(worker, ("instagram", topic, CREDENTIALS["instagram"], limit)))
+    
+    # Recolectar resultados
+    all_data = []
+    for task in tasks:
+        try:
+            res = task.get(timeout=1800) 
+            if res:
+                all_data.extend(res)
+        except Exception as e:
+            print(f"Error en un worker: {e}")
+            
+    pool.close()
+    pool.join()
+    
+    print(f"\n[Terminado] Se han recolectado {len(all_data)} registros.")
+    
+    csv_path = None
+    
+    if all_data:
+        # Create DataFrame
+        df = pd.DataFrame(all_data)
+
+        # FASE 1.5: GUARDADO INTERMEDIO (SEGURIDAD)
+        os.makedirs("data", exist_ok=True)
+        try:
+            raw_csv_name = f"corpus_{topic}_raw.csv"
+            raw_path = os.path.join("data", raw_csv_name)
+            df.to_csv(raw_path, index=False, encoding='utf-8-sig')
+            print(f"[Backup] Datos crudos guardados en: {raw_csv_name}")
+        except Exception as e:
+            print(f"[Backup Error] No se pudo guardar copia de seguridad: {e}")
+
+        # FASE 2: PROCESAMIENTO CON LLMs 
+        try:
+            print("\n[INFO] Iniciando Fase 2: Clasificación de Sentimiento con LLMs...")
+            df = process_dataframe_concurrently(df)
+            print("[INFO] Fase 2 completada.")
+        except Exception as e:
+            print(f"\n[WARN] No se pudo ejecutar el análisis de LLMs: {e}")
+
+        # Reorder/Filter columns
+        cols = ['platform', 'sentiment_llm', 'explanation_llm', 'tokens_llm', 'post_index', 'post_author', 'post_content', 'comment_author', 'comment_content']
+        cols = [c for c in cols if c in df.columns] + [c for c in df.columns if c not in cols and c not in ['sentiment_llm', 'explanation_llm', 'tokens_llm']]
+        df = df[cols]
+
+        # Export CSV Final
+        try:
+            csv_name = f"corpus_{topic}.csv"
+            csv_path = os.path.join("data", csv_name)
+            df.to_csv(csv_path, index=False, encoding='utf-8-sig')
+            print(f"Saved CSV: {csv_name}")
+        except Exception as e:
+            print(f"Could not save CSV: {e}")
+
+    # 4. Ejecutar Pipeline de NLP (Genera gráficas)
+    print("\n[Orquestador] Iniciando procesamiento de NLP...")
+    try:
+        nlp_pipeline.run_nlp_pipeline(topic=topic)
+    except Exception as e:
+        print(f"[NLP Error] Fallo en el pipeline de NLP: {e}")
+        
+    return csv_path
 
 if __name__ == "__main__":
     # 1. Obtener TEMA
@@ -73,120 +157,11 @@ if __name__ == "__main__":
     
     print(f"[Config] Meta unificada: {limit} posts por red.")
     
-    print(f"[Config] Meta unificada: {limit} posts por red.")
+    # 2. Cargar Credenciales (Globales ya cargadas arriba pero por claridad)
+    # 3. Ejecutar Pipeline
+    result_csv = run_pipeline(topic, limit)
     
-    # 2. Cargar Credenciales desde Config Centralizado
-    CREDENTIALS = config.CREDENTIALS
-    
-    print("\n[Orquestador] Iniciando extracción PARALELA...")
-    
-    print("\n[Orquestador] Iniciando extracción PARALELA...")
-    
-    # Crear procesos
-    # Usamos multiprocessing para cumplir con el requisito académico
-    pool = multiprocessing.Pool(processes=4) # Número de redes a scrapear
-    
-    tasks = []
-    # Tarea Facebook
-    tasks.append(pool.apply_async(worker, ("facebook", topic, CREDENTIALS["facebook"], limit)))
-    
-    # Tarea Twitter (Siempre intentar, puede tener cookies)
-    tasks.append(pool.apply_async(worker, ("twitter", topic, CREDENTIALS["twitter"], limit)))
-
-    # Tarea LinkedIn
-    # Se añade siempre, el worker decide si tiene credenciales o intenta con cookies
-    tasks.append(pool.apply_async(worker, ("linkedin", topic, CREDENTIALS["linkedin"], limit)))
-
-    tasks.append(pool.apply_async(worker, ("instagram", topic, CREDENTIALS["instagram"], limit)))
-    
-    # Recolectar resultados
-    all_data = []
-    for task in tasks:
-        try:
-            res = task.get(timeout=1800) # Timeout aumentado (30 min) para scraping largo
-            all_data.extend(res)
-        except Exception as e:
-            print(f"Error en un worker: {e}")
-            
-    pool.close()
-    pool.join()
-    
-    # Guardar Corpus (CSV Directo)
-    os.makedirs("data", exist_ok=True)
-    # Bloque JSON removido a petición
-    
-    print(f"\n[Terminado] Se han recolectado {len(all_data)} registros.")
-
-    # exportar a Excel / CSV
-    if all_data:
-       # Create DataFrame
-        df = pd.DataFrame(all_data)
-
-        # ---------------------------------------------------------
-        # FASE 1.5: GUARDADO INTERMEDIO (SEGURIDAD)
-        # ---------------------------------------------------------
-        try:
-            raw_csv_name = f"corpus_{topic}_raw.csv"
-            df.to_csv(os.path.join("data", raw_csv_name), index=False, encoding='utf-8-sig')
-            print(f"[Backup] Datos crudos guardados en: {raw_csv_name}")
-        except Exception as e:
-            print(f"[Backup Error] No se pudo guardar copia de seguridad: {e}")
-
-        # ---------------------------------------------------------
-        # FASE 2: PROCESAMIENTO CON LLMs 
-        # ---------------------------------------------------------
-        if True: # ACTIVAMOS LLMS
-            try:
-                from llm_processor import process_dataframe_concurrently
-                print("\n[INFO] Iniciando Fase 2: Clasificación de Sentimiento con LLMs...")
-                df = process_dataframe_concurrently(df)
-                print("[INFO] Fase 2 completada.")
-            except Exception as e:
-                print(f"\n[WARN] No se pudo ejecutar el análisis de LLMs: {e}")
-        else:
-             print("\n[INFO] Fase 2 (LLMs) SALTADA. Guardando datos crudos...")
-
-        # Reorder columns if desired
-        # Expected columns: platform, post_index, post_author, post_content, comment_author, comment_content, sentiment_llm, explanation_llm
-        cols = ['platform', 'sentiment_llm', 'explanation_llm', 'post_index', 'post_author', 'post_content', 'comment_author', 'comment_content']
-        # Filter to only existing columns
-        cols = [c for c in cols if c in df.columns] + [c for c in df.columns if c not in cols and c not in ['sentiment_llm', 'explanation_llm']]
-        
-        df = df[cols]
-
-        # Export
-        print("Exporting data...")
-
-        # 1. Excel (requires openpyxl) -- DESACTIVADO POR PETICIÓN
-        # try:
-        #     excel_name = f"corpus_{topic}.xlsx"
-        #     df.to_excel(os.path.join("data", excel_name), index=False)
-        #     print(f"Saved Excel: {excel_name}")
-        # except Exception as e:
-        #     print(f"Could not save Excel: {e}")
-
-        # 2. CSV
-        try:
-            csv_name = f"corpus_{topic}.csv"
-            # Escape special characters to avoid breaking CSV format
-            # Use simple str() conversion or specific replacement
-            df.to_csv(os.path.join("data", csv_name), index=False, encoding='utf-8-sig') # utf-8-sig for Excel compatibility
-            print(f"Saved CSV: {csv_name}")
-        except Exception as e:
-            print(f"Could not save CSV: {e}")
-            try:
-               # Fallback for older pandas versions usually not needed but safety first
-               print("Standard export failed, trying alternative...")
-               # This line was problematic in the original snippet, fixing it to be valid Python
-               df_cleaned = df.applymap(lambda x: x.encode('unicode_escape').decode('utf-8') if isinstance(x, str) else x)
-               df_cleaned.to_csv(os.path.join("data", csv_name), index=False, encoding='utf-8-sig')
-            except Exception as inner_e:
-               print(f"Alternative CSV export also failed: {inner_e}")
-
-
-    # 4. Ejecutar Pipeline de NLP
-    print("\n[Orquestador] Iniciando procesamiento de NLP...")
-    try:
-        nlp_pipeline.run_nlp_pipeline(topic=topic)
-    except Exception as e:
-        print(f"[NLP Error] Fallo en el pipeline de NLP: {e}")
+    if result_csv:
+        print(f"\n[EXITO] Proceso completo. Resultado en: {result_csv}")
+    else:
+        print("\n[FIN] Proceso terminado sin generar CSV final (posiblemente sin datos).")
