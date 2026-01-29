@@ -13,6 +13,7 @@ backend/data/*.csv
 backend/data/*.xlsx
 backend/data/*.json
 backend/data/*.png
+backend/config.py
 
 # Perfiles de navegador (Pesados y con credenciales)
 backend/profiles/
