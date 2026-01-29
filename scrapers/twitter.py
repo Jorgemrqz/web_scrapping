@@ -1,6 +1,8 @@
 import os
 import random
 import time
+import subprocess
+import socket
 from typing import Dict, List
 
 from playwright.sync_api import TimeoutError, sync_playwright
@@ -13,6 +15,44 @@ SLEEP_MIN = 1.0
 SLEEP_MAX = 2.2
 MAX_SCROLLS = 100 # Scroll global del feed
 TARGET_REPLIES_PER_TWEET = 500 # Máximo por post
+
+
+def is_port_open(host, port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(1)
+        return s.connect_ex((host, port)) == 0
+
+
+def ensure_remote_browser():
+    try:
+        # Verificar si ya está corriendo
+        if is_port_open("127.0.0.1", 9222):
+            print("[X] Navegador remoto detectado activo en puerto 9222.")
+            return True
+
+        print("[X] Iniciando navegador remoto via launch_chrome.bat...")
+        bat_path = os.path.join(os.getcwd(), "launch_chrome.bat")
+        
+        if not os.path.exists(bat_path):
+            print(f"[X] Error: No encuentro {bat_path}")
+            return False
+            
+        # Lanzar en segundo plano
+        subprocess.Popen(bat_path, shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE)
+        
+        # Esperar a que arranque (polling del puerto)
+        print("[X] Esperando a que Chrome arranque...")
+        for _ in range(10):
+            time.sleep(2)
+            if is_port_open("127.0.0.1", 9222):
+                print("[X] Conexión establecida con Chrome Debug.")
+                return True
+        
+        print("[X] Timeout esperando a Chrome Debug.")
+        return False
+    except Exception as e:
+        print(f"[X] No se pudo lanzar el bat: {e}")
+        return False
 
 
 def human_delay(multiplier: float = 1.0) -> None:
@@ -290,6 +330,10 @@ def scrape_twitter(topic: str, username: str, password: str, target_count: int =
     results: List[Dict[str, str]] = []
     print(f"[X] Iniciando para: {topic} | Meta: {target_count} POSTS")
 
+    # Intentar auto-arranque si está configurado remoto
+    if config.X_REMOTE_DEBUGGING_URL:
+        ensure_remote_browser()
+
     if config.X_PROFILE_PATH:
         user_data_dir = config.X_PROFILE_PATH
     else:
@@ -455,7 +499,12 @@ def scrape_twitter(topic: str, username: str, password: str, target_count: int =
         finally:
             if config.X_REMOTE_DEBUGGING_URL:
                 try:
-                    if browser: browser.close()
+                    if browser: 
+                        browser.close()
+                    # Matar el proceso específico de Chrome lanzado en puerto 9222
+                    print("[X] Cerrando proceso de Chrome Remoto...")
+                    # Usar WMIC para matar el proceso por línea de comandos (más robusto que PowerShell desde Python)
+                    subprocess.run('wmic process where "CommandLine like \'%--remote-debugging-port=9222%\' and Name=\'chrome.exe\'" call terminate', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 except: pass
             else:
                  try: 
