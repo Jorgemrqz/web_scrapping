@@ -10,6 +10,7 @@ from scrapers.linkedin import scrape_linkedin
 from scrapers.instagram import scrape_instagram
 import nlp_pipeline
 from llm_processor import process_dataframe_concurrently
+from analysis import perform_analysis
 import config
 
 # Configuración (En un caso real, usar variables de entorno)
@@ -46,7 +47,7 @@ def worker(platform, topic, creds, limit=15):
 def run_pipeline(topic: str, limit: int = 10):
     """
     Función orquestadora principal.
-    Scraping -> LLM Processing -> NLP Pipeline -> CSV Export
+    Scraping -> LLM Processing -> NLP Pipeline -> CSV Export -> Storytelling
     Retorna: Ruta del CSV generado o None si falla.
     """
     print(f"\n[Orquestador] Iniciando extracción PARALELA para '{topic}' (Límite: {limit})...")
@@ -127,6 +128,14 @@ def run_pipeline(topic: str, limit: int = 10):
     except Exception as e:
         print(f"[NLP Error] Fallo en el pipeline de NLP: {e}")
         
+    # 5. Ejecutar Análisis Agregado y Storytelling (Backend Application Layer)
+    if csv_path:
+        try:
+            print("\n[Orquestador] Generando Informe Ejecutivo (Storytelling)...")
+            perform_analysis(csv_path, topic)
+        except Exception as e:
+             print(f"[Analysis Error] No se pudo generar el reporte JSON: {e}")
+
     return csv_path
 
 if __name__ == "__main__":
@@ -157,7 +166,6 @@ if __name__ == "__main__":
     
     print(f"[Config] Meta unificada: {limit} posts por red.")
     
-    # 2. Cargar Credenciales (Globales ya cargadas arriba pero por claridad)
     # 3. Ejecutar Pipeline
     result_csv = run_pipeline(topic, limit)
     

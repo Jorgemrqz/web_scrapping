@@ -56,6 +56,46 @@ class LLMProcessor:
         except Exception as e:
             return {"sentiment": "Error", "explanation": str(e), "tokens": 0}
 
+    def generate_storytelling(self, topic, stats):
+        """
+        Genera un reporte narrativo (storytelling) basado en estadísticas agregadas.
+        stats format expected:
+        {
+            "global": {"Positivo": 10, "Negativo": 5, ...},
+            "by_platform": {
+                "twitter": {"Positivo": 2, ...},
+                ...
+            },
+            "top_positive_examples": [...],
+            "top_negative_examples": [...]
+        }
+        """
+        if not DEEPSEEK_API_KEY: return "Error: No API Key."
+        
+        prompt = (
+            f"Actúa como un analista de datos y sociólogo experto. "
+            f"Se ha realizado un análisis de sentimiento en redes sociales sobre el tema: '{topic}'.\n\n"
+            f"DATOS CUANTITATIVOS:\n{json.dumps(stats, indent=2, ensure_ascii=False)}\n\n"
+            "TAREA:\n"
+            "Escribe un breve informe ejecutivo (Storytelling) de 3 párrafos que interprete estos resultados.\n"
+            "1. Párrafo 1: Resumen Global. ¿Cuál es el sentir general? ¿Hay polarización?\n"
+            "2. Párrafo 2: Análisis Comparativo por Red Social. ¿Se comporta distinto Twitter que Instagram? ¿Por qué crees?\n"
+            "3. Párrafo 3: Insights Cualitativos. Basándote en los números, ¿qué conclusiones estratégicas sacas?\n\n"
+            "Usa un tono profesional pero atrapante. No listes solo números, cuenta la historia detrás de ellos."
+        )
+
+        try:
+            client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=600
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"No se pudo generar el storytelling: {str(e)}"
+
     # --- RUTER PRINCIPAL ---
     def analyze_row(self, row):
         # ... (código previo omitido para brevedad, no cambia lógica de limpieza) ...

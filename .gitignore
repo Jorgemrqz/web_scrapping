@@ -1,30 +1,27 @@
-# Excluir configuración con contraseñas
-config.py
-
-# Excluir perfiles de navegador y cookies
-auth_profile/
-auth_profile_x/
-auth_profile_linkedin/
-auth_profile_instagram/
-
-# Excluir entornos virtuales y cachés de Python
-venv/
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
 
-# Excluir datos scrapeados y logs
-data/
-*.json
+# Entornos virtuales
+venv/
+backend/venv/
+backend/chrome_debug_profile/
 
-# Excluir archivos de debug generados por el scraper
-debug_*.html
-debug_*.png
+# Datos generados (CSV, Excel)
+backend/data/*.csv
+backend/data/*.xlsx
+backend/data/*.json
+backend/data/*.png
+
+# Perfiles de navegador (Pesados y con credenciales)
+backend/profiles/
+backend/chrome_debug_profile/
+
+# Logs y temporales
 *.log
+.DS_Store
 
-.venv/
-
-*.csv
-
-test_deepseek_cost.py
-
-chrome_debug_profile/
+# IDEs
+.vscode/
+.idea/
