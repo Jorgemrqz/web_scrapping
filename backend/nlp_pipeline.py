@@ -3,6 +3,8 @@ import os
 import re
 import glob
 import nltk
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 from nltk.corpus import stopwords
