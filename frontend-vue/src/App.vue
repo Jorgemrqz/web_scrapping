@@ -7,6 +7,7 @@ import { marked } from 'marked';
 // Vistas
 const currentView = ref('search'); // 'search' | 'dashboard'
 const activeTab = ref('overview'); // 'overview' | 'platforms' | 'storytelling' | 'data'
+const isSidebarCollapsed = ref(false);
 
 // Datos de Búsqueda
 const topic = ref('');
@@ -80,6 +81,15 @@ const storytellingHtml = computed(() => {
 
 // --- Métodos ---
 
+function toggleSidebar() {
+    isSidebarCollapsed.value = !isSidebarCollapsed.value;
+    // Resize charts after transition
+    setTimeout(() => {
+        if (globalChartInstance.value) globalChartInstance.value.resize();
+        if (platformChartInstance.value) platformChartInstance.value.resize();
+    }, 310);
+}
+
 function getTotal() {
     if (!dashboardData.value) return 0;
     const counts = dashboardData.value.stats.global_counts;
@@ -89,7 +99,7 @@ function getTotal() {
 async function startAnalysis() {
     if (!topic.value.trim()) {
         statusText.value = "⚠️ Por favor ingresa un tema.";
-        statusColor.value = "text-red-500"; // Usaremos clases utilitarias o inline styles si hace falta
+        statusColor.value = "text-danger"; // Fixed: use css variable or known class
         return;
     }
 
@@ -98,11 +108,7 @@ async function startAnalysis() {
     statusColor.value = "text-secondary";
 
     try {
-        const response = await fetch('/scrape', { // Proxy configurado en vite.config.js o ruta relativa si backend sirve front
-             // Nota: En desarrollo local con Vite separado del backend, necesitarás configurar proxy o usar URL completa.
-             // Asumiremos que en prod el backend sirve el front, pero en dev Vite corre en otro puerto.
-             // Para este caso, usaré ruta relativa asumiendo proxy o backend en 8000.
-             // Si falla en dev, cambiar a http://localhost:8000/scrape
+        const response = await fetch('/scrape', { 
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
              body: JSON.stringify({ topic: topic.value, limit: parseInt(limit.value) })
@@ -116,7 +122,7 @@ async function startAnalysis() {
 
     } catch (error) {
         console.error(error);
-        statusText.value = "❌ Error al conectar con el servidor. Asegúrate que api.py esté corriendo.";
+        statusText.value = "❌ Error al conectar con el servidor.";
         isLoading.value = false;
     }
 }
@@ -160,6 +166,7 @@ function resetSearch() {
     dashboardData.value = null;
     currentView.value = 'search';
     topic.value = '';
+    isSidebarCollapsed.value = false; // Reset sidebar
 }
 
 function switchTab(tab) {
@@ -266,30 +273,35 @@ function getSentimentClass(text) {
   <div class="app-container">
     
     <!-- SIDEBAR (Only visible in Dashboard View) -->
-    <nav class="sidebar" :class="{ hidden: currentView === 'search' }">
+    <nav class="sidebar" :class="{ hidden: currentView === 'search', collapsed: isSidebarCollapsed }">
+        <!-- Sidebar Toggle -->
+        <div class="sidebar-toggle" @click="toggleSidebar">
+             <i :class="isSidebarCollapsed ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-left'"></i>
+        </div>
+
         <div class="logo-area">
             <i class="fa-solid fa-bolt pulse-icon-fa"></i>
             <h2>Sentiment<span class="highlight">Pulse</span></h2>
         </div>
         
         <ul class="nav-links">
-            <li :class="{ active: activeTab === 'overview' }" @click="switchTab('overview')">
+            <li :class="{ active: activeTab === 'overview' }" @click="switchTab('overview')" title="Visión Global">
                 <i class="fa-solid fa-chart-pie"></i> <span>Visión Global</span>
             </li>
-            <li :class="{ active: activeTab === 'platforms' }" @click="switchTab('platforms')">
+            <li :class="{ active: activeTab === 'platforms' }" @click="switchTab('platforms')" title="Plataformas">
                 <i class="fa-brands fa-hubspot"></i> <span>Por Plataforma</span>
             </li>
-            <li :class="{ active: activeTab === 'storytelling' }" @click="switchTab('storytelling')">
+            <li :class="{ active: activeTab === 'storytelling' }" @click="switchTab('storytelling')" title="Storytelling">
                 <i class="fa-solid fa-book-open-reader"></i> <span>Storytelling AI</span>
             </li>
-            <li :class="{ active: activeTab === 'data' }" @click="switchTab('data')">
+            <li :class="{ active: activeTab === 'data' }" @click="switchTab('data')" title="Datos">
                 <i class="fa-solid fa-table-list"></i> <span>Explorador de Datos</span>
             </li>
         </ul>
 
         <div class="nav-footer">
-            <button class="new-search-btn" @click="resetSearch">
-                <i class="fa-solid fa-magnifying-glass"></i> Nueva Búsqueda
+            <button class="new-search-btn" @click="resetSearch" title="Nueva Búsqueda">
+                <i class="fa-solid fa-magnifying-glass"></i> <span v-if="!isSidebarCollapsed">Nueva Búsqueda</span>
             </button>
         </div>
     </nav>
@@ -297,18 +309,18 @@ function getSentimentClass(text) {
     <!-- MAIN CONTENT -->
     <main class="main-content">
         
-        <!-- SEARCH VIEW -->
+        <!-- SEARCH VIEW (WELCOME PAGE) -->
         <div v-if="currentView === 'search'" class="view-container active-view">
             <div class="search-hero">
                 <div class="hero-text">
-                    <h1>Social Sentiment <span class="highlight">Pulse</span></h1>
-                    <p>Inteligencia Artificial para el análisis de opinión pública en tiempo real.</p>
+                    <h1>Bienvenido a <br>Social Sentiment <span class="highlight">Pulse</span></h1>
+                    <p>Empieza a analizar la opinión pública en tiempo real.</p>
                 </div>
 
                 <div class="search-card glass-card">
                     <div class="input-wrapper">
                         <i class="fa-solid fa-magnifying-glass search-icon"></i>
-                        <input type="text" v-model="topic" placeholder="Ej: Elecciones 2026, iPhone 16..." autocomplete="off" @keyup.enter="startAnalysis">
+                        <input type="text" v-model="topic" placeholder="Escribe un tema (ej: Elecciones, iPhone 16...)" autocomplete="off" @keyup.enter="startAnalysis">
                     </div>
                     
                     <div class="options-wrapper">
@@ -317,12 +329,32 @@ function getSentimentClass(text) {
                     </div>
 
                     <button id="analyzeBtn" @click="startAnalysis" :disabled="isLoading">
-                        <span v-if="!isLoading" class="btn-text">Iniciar Análisis</span>
+                        <span v-if="!isLoading" class="btn-text">Iniciar Análisis Inteligente</span>
                         <div v-else class="loader"></div>
                     </button>
                     
                     <p class="status-message" :class="statusColor">{{ statusText }}</p>
                 </div>
+
+                <!-- FEATURES GRID (NEW) -->
+                <div class="features-grid">
+                    <div class="feature-item">
+                        <div class="feature-icon"><i class="fa-solid fa-robot"></i></div>
+                        <h3>IA Avanzada</h3>
+                        <p>Análisis de sentimiento potenciado por LLMs locales.</p>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon"><i class="fa-solid fa-network-wired"></i></div>
+                        <h3>Multi-Plataforma</h3>
+                        <p>Scraping simultáneo de Twitter, LinkedIn y más.</p>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon"><i class="fa-solid fa-chart-line"></i></div>
+                        <h3>Insights Reales</h3>
+                        <p>Descubre tendencias ocultas en los comentarios.</p>
+                    </div>
+                </div>
+
             </div>
         </div>
 
