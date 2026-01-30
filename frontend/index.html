@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Social Sentiment Pulse | Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Fuentes Modernas -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Librerías JS (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="glass-background"></div>
+
+    <div class="container">
+        <!-- HEADER -->
+        <header>
+            <div class="logo">
+                <span class="pulse-icon"></span>
+                <h1>Social Sentiment <span class="highlight">Pulse</span></h1>
+            </div>
+            <p class="subtitle">Análisis de Opinión en Tiempo Real con IA</p>
+        </header>
+
+        <!-- SEARCH BAR -->
+        <section class="search-section glass-card">
+            <div class="input-group">
+                <input type="text" id="topicInput" placeholder="Ej: Elecciones, Cambio Climático..." autocomplete="off">
+                <input type="number" id="limitInput" value="5" min="1" max="20" title="Posts por red">
+                <button id="analyzeBtn" onclick="startAnalysis()">
+                    <span class="btn-text">Analizar</span>
+                    <div class="loader" id="btnLoader"></div>
+                </button>
+            </div>
+            <p class="status-text" id="statusText">Listo para buscar.</p>
+        </section>
+
+        <!-- DASHBOARD (Hidden by default) -->
+        <div id="dashboard" class="hidden">
+            
+            <!-- STORYTELLING -->
+            <section class="story-section glass-card">
+                <h2>📊 Informe Ejecutivo AI</h2>
+                <div id="storyContent" class="markdown-body">
+                    <!-- Contenido generado por DeepSeek aquí -->
+                </div>
+            </section>
+
+            <!-- CHARTS GRID -->
+            <div class="charts-grid">
+                <div class="chart-card glass-card">
+                    <h3>Sentimiento Global</h3>
+                    <div class="chart-container">
+                        <canvas id="globalChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card glass-card">
+                    <h3>Por Plataforma</h3>
+                    <div class="chart-container">
+                        <canvas id="platformChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DATA TABLE -->
+            <section class="data-section glass-card">
+                <h3>Muestra de Datos (Recientes)</h3>
+                <div class="table-wrapper">
+                    <table id="dataTable">
+                        <thead>
+                            <tr>
+                                <th>Red</th>
+                                <th>Sentimiento</th>
+                                <th>Contenido</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Filas dinámicas -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

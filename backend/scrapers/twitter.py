@@ -373,7 +373,7 @@ def scrape_twitter(topic: str, username: str, password: str, target_count: int =
 
                 launch_kwargs = {
                     "user_data_dir": user_data_dir,
-                    "headless": False,
+                    "headless": True,
                     "locale": "es-ES",
                     "args": args,
                 }

@@ -19,7 +19,7 @@ def scrape_linkedin(topic, email, password, target_count=10):
         args_list = ["--disable-notifications", "--disable-blink-features=AutomationControlled", "--start-maximized", "--no-sandbox", "--disable-gpu"]
         
         try:
-            browser = p.chromium.launch_persistent_context(user_data_dir, headless=False, args=args_list, user_agent=user_agent, viewport=None)
+            browser = p.chromium.launch_persistent_context(user_data_dir, headless=True, args=args_list, user_agent=user_agent, viewport=None)
         except Exception as launch_error:
             print(f"[LinkedIn] Error lanzando navegador: {launch_error}")
             return []

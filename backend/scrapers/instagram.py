@@ -35,7 +35,7 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
 
         ctx = p.chromium.launch_persistent_context(
             user_data_dir,
-            headless=False, # Ver proceso
+            headless=True, # Ver proceso
             args=args,
             viewport=None,
         )

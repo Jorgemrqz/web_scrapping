@@ -1,6 +1,9 @@
 from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 import os
+import json
 import uvicorn
 from main_parallel import run_pipeline
 
@@ -25,9 +28,21 @@ async def start_scrape(req: ScrapeRequest, background_tasks: BackgroundTasks):
     
     return {
         "status": "processing", 
-        "message": f"El proceso para '{req.topic}' ha comenzado en segundo plano.",
-        "expected_csv": f"data/corpus_{req.topic}.csv"
+        "message": f"Análisis de '{req.topic}' iniciado.",
+        "topic": req.topic
     }
+
+@app.get("/results/{topic}")
+def get_results(topic: str):
+    """Devuelve el JSON de análisis si existe."""
+    json_path = os.path.join("data", f"analysis_{topic}.json")
+    if os.path.exists(json_path):
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data
+    else:
+        # Retornar 404 si no existe aún (el frontend seguirá intentando)
+        raise HTTPException(status_code=404, detail="Analysis not ready or not found")
 
 @app.get("/list-data")
 def list_data():
@@ -40,9 +55,11 @@ def list_data():
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/")
-def root():
-    return {"message": "API de Web Scraping activa. POST a /scrape para usar."}
+# Servir Frontend (Archivos estáticos)
+# Esto DEBE ir al final para no bloquear otras rutas
+frontend_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
+if os.path.exists(frontend_path):
+    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
 
 if __name__ == "__main__":
     # Ejecutar servidor en puerto 8000
