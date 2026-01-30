@@ -112,27 +112,69 @@ def run_pipeline(topic: str, limit: int = 10):
         cols = [c for c in cols if c in df.columns] + [c for c in df.columns if c not in cols and c not in ['sentiment_llm', 'explanation_llm', 'tokens_llm']]
         df = df[cols]
 
-        # Export CSV Final
+        # Export JSON (Structured)
         try:
-            csv_name = f"corpus_{topic}.csv"
-            csv_path = os.path.join("data", csv_name)
-            df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-            print(f"Saved CSV: {csv_name}")
-        except Exception as e:
-            print(f"Could not save CSV: {e}")
+            json_name = f"corpus_{topic}.json"
+            json_path = os.path.join("data", json_name)
+            
+            # Nesting Data: Group by Post Content/Author/Platform
+            # We assume 'post_content' + 'platform' is unique enough for this session
+            structured_data = []
+            
+            # Fill NaN with empty string to avoid grouping errors
+            df.fillna("", inplace=True)
+            
+            # Create a unique group key
+            if 'post_index' in df.columns:
+                 grouped = df.groupby(['platform', 'post_index'])
+            else:
+                 grouped = df.groupby(['platform', 'post_content'])
+                 
+            for name, group in grouped:
+                first_row = group.iloc[0]
+                post_obj = {
+                    "platform": first_row.get('platform', ''),
+                    "author": first_row.get('post_author', ''),
+                    "content": first_row.get('post_content', ''),
+                    "sentiment_llm": group['sentiment_llm'].mode()[0] if not group['sentiment_llm'].empty else "", # Post sentiment (heuristic)
+                    "comments": []
+                }
+                
+                # Add comments
+                for _, row in group.iterrows():
+                    if row.get('comment_content'):
+                        post_obj["comments"].append({
+                            "author": row.get('comment_author', ''),
+                            "content": row.get('comment_content', ''),
+                            "sentiment": row.get('sentiment_llm', '') # Comment specific sentiment
+                        })
+                
+                structured_data.append(post_obj)
 
-    # 4. Ejecutar Pipeline de NLP (Genera gráficas)
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(structured_data, f, indent=2, ensure_ascii=False)
+                
+            print(f"[Export] Datos guardados en formato JSON estructurado: {json_name}")
+            csv_path = json_path # Update variable for return, though it's a json now
+            
+        except Exception as e:
+            print(f"Could not save JSON: {e}")
+            import traceback
+            traceback.print_exc()
+
+    # 4. Ejecutar Pipeline de NLP
     print("\n[Orquestador] Iniciando procesamiento de NLP...")
     try:
         nlp_pipeline.run_nlp_pipeline(topic=topic)
     except Exception as e:
         print(f"[NLP Error] Fallo en el pipeline de NLP: {e}")
         
-    # 5. Ejecutar Análisis Agregado y Storytelling (Backend Application Layer)
-    if csv_path:
+    # 5. Ejecutar Análisis Agregado y Storytelling
+    if df is not None and not df.empty:
         try:
             print("\n[Orquestador] Generando Informe Ejecutivo (Storytelling)...")
-            perform_analysis(csv_path, topic)
+            # Pass DF directly to avoid re-reading
+            perform_analysis(None, topic, df=df)
         except Exception as e:
              print(f"[Analysis Error] No se pudo generar el reporte JSON: {e}")
 

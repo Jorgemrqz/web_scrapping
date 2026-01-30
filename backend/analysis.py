@@ -3,19 +3,34 @@ import json
 import os
 from llm_processor import LLMProcessor
 
-def perform_analysis(csv_path, topic):
+def perform_analysis(csv_path, topic, df=None):
     """
-    Lee el CSV procesado, calcula estadísticas de sentimiento
+    Lee el DF (o CSV/JSON), calcula estadísticas de sentimiento
     y genera el storytelling con DeepSeek.
     Guarda los resultados en un JSON 'analysis_{topic}.json'.
     """
-    if not os.path.exists(csv_path):
-        return {"error": "CSV file not found"}
-
-    try:
-        df = pd.read_csv(csv_path)
-    except Exception as e:
-        return {"error": f"Failed to read CSV: {e}"}
+    if df is None:
+        if csv_path and os.path.exists(csv_path):
+             try:
+                df = pd.read_csv(csv_path)
+             except Exception as e:
+                return {"error": f"Failed to read CSV: {e}"}
+        else:
+             # Try JSON if CSV not found (future compatibility)
+             json_path = csv_path.replace('.csv', '.json') if csv_path else None
+             if json_path and os.path.exists(json_path):
+                 try:
+                     with open(json_path, 'r', encoding='utf-8') as f:
+                         data = json.load(f)
+                     # Flatten for analysis if needed, or handle structured
+                     # For now, let's assume we need to rebuild the flat DF for the logic below
+                     # This is a bit complex, so we prefer passing DF directly from main
+                     pass 
+                 except:
+                     pass
+                     
+        if df is None:
+            return {"error": "No data available (DataFrame is None and file not found)"}
 
     # Normalizar columnas por si acaso
     if 'sentiment_llm' not in df.columns:
