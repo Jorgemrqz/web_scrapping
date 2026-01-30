@@ -241,7 +241,7 @@ function switchTab(tab) {
                     </div>
                     
                     <div class="options-wrapper">
-                        <label><i class="fa-solid fa-filter"></i> Límite por red:</label>
+                        <label><i class="fa-solid fa-filter"></i> Límite de Post por red:</label>
                         <input type="number" v-model="limit" min="5" max="50">
                     </div>
 

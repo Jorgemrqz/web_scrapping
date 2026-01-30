@@ -119,6 +119,10 @@ body {
   cursor: pointer;
   color: var(--text-secondary);
   transition: all 0.2s;
+  overflow: hidden;
+  /* Ensure text doesn't spill over */
+  white-space: nowrap;
+  /* Prevent wrapping */
 }
 
 .nav-links li:hover {
@@ -130,6 +134,16 @@ body {
   background: rgba(59, 130, 246, 0.15);
   color: var(--accent-color);
   font-weight: 600;
+}
+
+.nav-links li.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.nav-links li.disabled:hover {
+  background: transparent;
+  color: var(--text-secondary);
 }
 
 .nav-footer {
@@ -151,6 +165,8 @@ body {
   transition: all 0.2s;
   font-family: inherit;
   font-size: 1rem;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .new-search-btn:hover {
