@@ -169,7 +169,10 @@ function resetSearch() {
     isSidebarCollapsed.value = false; // Reset sidebar
 }
 
+const hasData = computed(() => !!dashboardData.value);
+
 function switchTab(tab) {
+    if (!hasData.value) return; 
     activeTab.value = tab;
     if (tab === 'overview' || tab === 'platforms') {
         nextTick(() => {
@@ -177,93 +180,7 @@ function switchTab(tab) {
         });
     }
 }
-
-function renderCharts() {
-    if (!dashboardData.value) return;
-    
-    // Global Chart
-    const ctxGlobal = document.getElementById('globalChart');
-    if (ctxGlobal) {
-        if (globalChartInstance.value) globalChartInstance.value.destroy();
-        
-        const counts = dashboardData.value.stats.global_counts;
-        globalChartInstance.value = new Chart(ctxGlobal, {
-            type: 'doughnut',
-            data: {
-                labels: ['Positivo', 'Neutro', 'Negativo'],
-                datasets: [{
-                    data: [counts['Positivo']||0, counts['Neutro']||0, counts['Negativo']||0],
-                    backgroundColor: ['#10b981', '#94a3b8', '#ef4444'],
-                    borderWidth: 0,
-                    hoverOffset: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'right', labels: { color: '#cbd5e1', font: {family: 'Outfit'} } }
-                },
-                layout: { padding: 20 }
-            }
-        });
-    }
-
-    // Platform Chart
-    const ctxPlatform = document.getElementById('platformChart');
-    if (ctxPlatform) {
-        if (platformChartInstance.value) platformChartInstance.value.destroy();
-        
-        const stats = dashboardData.value.stats;
-        const platforms = Object.keys(stats.by_platform);
-        const colors = { 'Positivo': '#10b981', 'Neutro': '#94a3b8', 'Negativo': '#ef4444' };
-        
-        const datasets = ['Positivo', 'Neutro', 'Negativo'].map(sent => ({
-            label: sent,
-            data: platforms.map(p => stats.by_platform[p][sent] || 0),
-            backgroundColor: colors[sent],
-            borderRadius: 4
-        }));
-
-        platformChartInstance.value = new Chart(ctxPlatform, {
-            type: 'bar',
-            data: {
-                labels: platforms.map(p => p.charAt(0).toUpperCase() + p.slice(1)), 
-                datasets: datasets
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: { stacked: true, ticks: { color: '#94a3b8' }, grid: { display: false } },
-                    y: { stacked: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
-                },
-                plugins: {
-                    legend: { labels: { color: '#cbd5e1' } }
-                }
-            }
-        });
-    }
-}
-
-function getIcon(platform) {
-    if (!platform) return 'link';
-    const p = platform.toLowerCase();
-    if (p.includes('twitter') || p.includes('x')) return 'twitter';
-    if (p.includes('facebook')) return 'facebook';
-    if (p.includes('linkedin')) return 'linkedin';
-    if (p.includes('instagram')) return 'instagram';
-    if (p.includes('reddit')) return 'reddit';
-    return 'hashtag';
-}
-
-function getSentimentClass(text) {
-    if (!text) return 'tag-neu';
-    if (text.includes('Positivo')) return 'tag-pos';
-    if (text.includes('Negativo')) return 'tag-neg';
-    return 'tag-neu';
-}
-
+//...
 </script>
 
 <template>
@@ -272,8 +189,8 @@ function getSentimentClass(text) {
 
   <div class="app-container">
     
-    <!-- SIDEBAR (Only visible in Dashboard View) -->
-    <nav class="sidebar" :class="{ hidden: currentView === 'search', collapsed: isSidebarCollapsed }">
+    <!-- SIDEBAR (Always Visibe) -->
+    <nav class="sidebar" :class="{ collapsed: isSidebarCollapsed }">
         <!-- Sidebar Toggle -->
         <div class="sidebar-toggle" @click="toggleSidebar">
              <i :class="isSidebarCollapsed ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-left'"></i>
@@ -285,16 +202,16 @@ function getSentimentClass(text) {
         </div>
         
         <ul class="nav-links">
-            <li :class="{ active: activeTab === 'overview' }" @click="switchTab('overview')" title="Visión Global">
+            <li :class="{ active: activeTab === 'overview' && hasData, disabled: !hasData }" @click="switchTab('overview')" title="Visión Global">
                 <i class="fa-solid fa-chart-pie"></i> <span>Visión Global</span>
             </li>
-            <li :class="{ active: activeTab === 'platforms' }" @click="switchTab('platforms')" title="Plataformas">
+            <li :class="{ active: activeTab === 'platforms' && hasData, disabled: !hasData }" @click="switchTab('platforms')" title="Plataformas">
                 <i class="fa-brands fa-hubspot"></i> <span>Por Plataforma</span>
             </li>
-            <li :class="{ active: activeTab === 'storytelling' }" @click="switchTab('storytelling')" title="Storytelling">
+            <li :class="{ active: activeTab === 'storytelling' && hasData, disabled: !hasData }" @click="switchTab('storytelling')" title="Storytelling">
                 <i class="fa-solid fa-book-open-reader"></i> <span>Storytelling AI</span>
             </li>
-            <li :class="{ active: activeTab === 'data' }" @click="switchTab('data')" title="Datos">
+            <li :class="{ active: activeTab === 'data' && hasData, disabled: !hasData }" @click="switchTab('data')" title="Datos">
                 <i class="fa-solid fa-table-list"></i> <span>Explorador de Datos</span>
             </li>
         </ul>

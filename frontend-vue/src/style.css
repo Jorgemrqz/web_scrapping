@@ -56,7 +56,20 @@ body {
   display: flex;
   flex-direction: column;
   padding: 24px;
-  transition: transform 0.3s ease;
+  transition: width 0.3s ease, padding 0.3s ease;
+  position: relative;
+  /* For toggle positioning */
+  z-index: 50;
+}
+
+.nav-links li.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.nav-links li.disabled:hover {
+  background: transparent;
+  color: var(--text-secondary);
 }
 
 .sidebar.hidden {
