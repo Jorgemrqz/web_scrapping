@@ -82,6 +82,24 @@ def get_history():
         print(f"[API Error] {e}")
         return []
 
+@app.delete("/history/{topic}")
+def delete_history_item(topic: str):
+    """Elimina un item del historial."""
+    try:
+        from database import Database
+        db = Database()
+        if db.is_connected:
+            success = db.delete_analysis_history(topic)
+            if success:
+                return {"status": "deleted", "topic": topic}
+            else:
+                 raise HTTPException(status_code=404, detail="Topic not found or error deleting")
+        else:
+            raise HTTPException(status_code=500, detail="Database connection error")
+    except Exception as e:
+        print(f"[API Error] {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/list-data")
 def list_data():
     """Lista los archivos CSV generados en la carpeta data"""

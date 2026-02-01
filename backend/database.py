@@ -117,9 +117,47 @@ class Database:
         if not self.is_connected: return []
         try:
             analysis_coll = self.db["analysis_results"]
-            # Proyección para traer solo topic y updated_at
-            cursor = analysis_coll.find({}, {"topic": 1, "updated_at": 1, "_id": 0}).sort("updated_at", -1)
-            return list(cursor)
+            # Proyección para traer solo topic y updated_at, y stats para el count
+            cursor = analysis_coll.find({}, {
+                "topic": 1, 
+                "updated_at": 1, 
+                "data.stats.global_counts": 1, 
+                "_id": 0
+            }).sort("updated_at", -1)
+            
+            history = []
+            for doc in cursor:
+                total_comments = 0
+                if "data" in doc and "stats" in doc["data"] and "global_counts" in doc["data"]["stats"]:
+                    counts = doc["data"]["stats"]["global_counts"]
+                    total_comments = sum(counts.values()) if counts else 0
+                
+                history.append({
+                    "topic": doc["topic"],
+                    "updated_at": doc.get("updated_at"),
+                    "total_comments": total_comments
+                })
+            return history
         except Exception as e:
             print(f"[MongoDB] Error recuperando historial: {e}")
             return []
+
+    def delete_analysis_history(self, topic):
+        """Elimina el análisis y los posts asociados a un tema"""
+        if not self.is_connected: return False
+        try:
+            # Eliminar análisis
+            analysis_coll = self.db["analysis_results"]
+            res1 = analysis_coll.delete_one({"topic": topic})
+            
+            # Eliminar posts (Opcional, pero para limpieza completa)
+            # res2 = self.collection.delete_many({"topic": topic})
+            
+            # Si se borró algo, retornamos True
+            if res1.deleted_count > 0:
+                print(f"[MongoDB] Historial eliminado para '{topic}'")
+                return True
+            return False
+        except Exception as e:
+            print(f"[MongoDB] Error eliminando historial: {e}")
+            return False
