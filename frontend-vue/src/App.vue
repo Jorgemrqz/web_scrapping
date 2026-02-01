@@ -151,6 +151,38 @@ async function startAnalysis() {
     }
 }
 
+const searchHistory = ref([]);
+const API_URL = 'http://127.0.0.1:8000';
+
+onMounted(async () => {
+    // 1. Cargar Historial Inmediatamente (Independiente del estado)
+    fetchHistory();
+
+    // 2. Verificar Estado del Servidor
+    try {
+        const response = await fetch(`${API_URL}/`);
+        if (response.ok) {
+            statusText.value = "Conexión exitosa con el servidor.";
+        } else {
+            statusText.value = "Conectado, pero el servidor respondió error.";
+        }
+    } catch (e) {
+        statusText.value = "Servidor no detectado. Asegúrate de ejecutar el backend con 'python api.py'";
+    }
+});
+
+async function fetchHistory() {
+    try {
+        const res = await fetch(`${API_URL}/history`);
+        if (res.ok) {
+            searchHistory.value = await res.json();
+            console.log("Historial cargado:", searchHistory.value);
+        }
+    } catch (e) {
+        console.error("Error cargando historial", e);
+    }
+}
+
 function pollResults() {
     const interval = setInterval(async () => {
         try {
@@ -162,6 +194,7 @@ function pollResults() {
                 statusText.value = "✅ ¡Análisis Completado!";
                 setTimeout(() => {
                     loadDashboard(data);
+                    fetchHistory(); // Actualizar historial al recibir nuevos resultados
                 }, 500);
             } else if (res.status !== 404) {
                 clearInterval(interval);
@@ -172,6 +205,28 @@ function pollResults() {
             console.log("Polling error", e);
         }
     }, 3000);
+}
+
+async function loadHistoryItem(itemTopic) {
+    topic.value = itemTopic;
+    dashboardData.value = null; // Reset current view
+    isLoading.value = true;
+    currentView.value = 'search'; // Or keep in dashboard but show loading overlay
+    
+    // Fetch directly using existing logic
+    try {
+        const res = await fetch(`${API_URL}/results/${itemTopic}`);
+        if (res.ok) {
+            const data = await res.json();
+            loadDashboard(data);
+        } else {
+            statusText.value = "Error cargando historial.";
+            isLoading.value = false;
+        }
+    } catch (e) {
+        isLoading.value = false;
+        console.error(e);
+    }
 }
 
 function loadDashboard(data) {
@@ -349,11 +404,42 @@ const getPaginatedComments = (post) => {
             </li>
         </ul>
 
+        <!-- Menu -->
+        <nav class="sidebar-menu">
+            
+            <!-- History Section -->
+            <div class="history-section" v-if="!isSidebarCollapsed">
+                <div class="history-header">
+                    <span class="history-title">Historial</span>
+                    <i class="fa-solid fa-rotate-right refresh-icon" @click="fetchHistory" title="Actualizar"></i>
+                </div>
+                
+                <div v-if="searchHistory.length === 0" class="history-empty">
+                    Sin búsquedas recientes
+                </div>
+                
+                <div class="history-list" v-else>
+                    <button v-for="(item, idx) in searchHistory" :key="idx" class="history-item" @click="loadHistoryItem(item.topic)">
+                        <span class="history-icon-wrapper">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                        </span>
+                        <span>{{ item.topic }}</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+            
+
+        </nav>
+
         <div class="nav-footer">
             <button class="new-search-btn" @click="resetSearch" title="Nueva Búsqueda">
                 <i class="fa-solid fa-magnifying-glass"></i> <span v-if="!isSidebarCollapsed">Nueva Búsqueda</span>
             </button>
         </div>
+
+
     </nav>
 
     <!-- MAIN CONTENT -->

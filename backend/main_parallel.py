@@ -89,15 +89,11 @@ def run_pipeline(topic: str, limit: int = 10):
         # Create DataFrame
         df = pd.DataFrame(all_data)
 
-        # FASE 1.5: GUARDADO INTERMEDIO (SEGURIDAD)
-        os.makedirs("data", exist_ok=True)
-        try:
-            raw_csv_name = f"corpus_{topic}_raw.csv"
-            raw_path = os.path.join("data", raw_csv_name)
-            df.to_csv(raw_path, index=False, encoding='utf-8-sig')
-            print(f"[Backup] Datos crudos guardados en: {raw_csv_name}")
-        except Exception as e:
-            print(f"[Backup Error] No se pudo guardar copia de seguridad: {e}")
+        # FASE 1.5: GUARDADO INTERMEDIO (OMITIDO - SOLO MEMORIA)
+        # raw_csv_name = f"corpus_{topic}_raw.csv"
+        # raw_path = os.path.join("data", raw_csv_name)
+        # df.to_csv(raw_path, index=False, encoding='utf-8-sig')
+        # print(f"[Backup] Datos crudos guardados en: {raw_csv_name}")
 
         # FASE 2: PROCESAMIENTO CON LLMs 
         try:
@@ -112,62 +108,62 @@ def run_pipeline(topic: str, limit: int = 10):
         cols = [c for c in cols if c in df.columns] + [c for c in df.columns if c not in cols and c not in ['sentiment_llm', 'explanation_llm', 'tokens_llm']]
         df = df[cols]
 
-            # Export JSON (Structured)
+        # Export JSON (Structured)
+        try:
+            # Nesting Data: Group by Post Content/Author/Platform
+            # We assume 'post_content' + 'platform' is unique enough for this session
+            structured_data = []
+            
+            # Fill NaN with empty string to avoid grouping errors
+            df.fillna("", inplace=True)
+            
+            # Create a unique group key
+            if 'post_index' in df.columns:
+                 grouped = df.groupby(['platform', 'post_index'])
+            else:
+                 grouped = df.groupby(['platform', 'post_content'])
+                 
+            for name, group in grouped:
+                first_row = group.iloc[0]
+                post_obj = {
+                    "platform": first_row.get('platform', ''),
+                    "author": first_row.get('post_author', ''),
+                    "content": first_row.get('post_content', ''),
+                    "sentiment_llm": group['sentiment_llm'].mode()[0] if not group['sentiment_llm'].empty else "", # Post sentiment (heuristic)
+                    "comments": []
+                }
+                
+                # Add comments
+                for _, row in group.iterrows():
+                    if row.get('comment_content'):
+                        post_obj["comments"].append({
+                            "author": row.get('comment_author', ''),
+                            "content": row.get('comment_content', ''),
+                            "sentiment": row.get('sentiment_llm', '') # Comment specific sentiment
+                        })
+                
+                structured_data.append(post_obj)
+
+            # --- GUARDADO EN MONGODB (PRIMARIO) ---
+            print(f"[Export] Guardando {len(structured_data)} posts estructurados en MongoDB...")
             try:
-                # Nesting Data: Group by Post Content/Author/Platform
-                # We assume 'post_content' + 'platform' is unique enough for this session
-                structured_data = []
-                
-                # Fill NaN with empty string to avoid grouping errors
-                df.fillna("", inplace=True)
-                
-                # Create a unique group key
-                if 'post_index' in df.columns:
-                     grouped = df.groupby(['platform', 'post_index'])
+                from database import Database
+                db = Database() # Intenta conectar a localhost por defecto
+                if db.is_connected:
+                    db.save_corpus(topic, structured_data)
                 else:
-                     grouped = df.groupby(['platform', 'post_content'])
-                     
-                for name, group in grouped:
-                    first_row = group.iloc[0]
-                    post_obj = {
-                        "platform": first_row.get('platform', ''),
-                        "author": first_row.get('post_author', ''),
-                        "content": first_row.get('post_content', ''),
-                        "sentiment_llm": group['sentiment_llm'].mode()[0] if not group['sentiment_llm'].empty else "", # Post sentiment (heuristic)
-                        "comments": []
-                    }
-                    
-                    # Add comments
-                    for _, row in group.iterrows():
-                        if row.get('comment_content'):
-                            post_obj["comments"].append({
-                                "author": row.get('comment_author', ''),
-                                "content": row.get('comment_content', ''),
-                                "sentiment": row.get('sentiment_llm', '') # Comment specific sentiment
-                            })
-                    
-                    structured_data.append(post_obj)
-
-                # --- GUARDADO EN MONGODB (PRIMARIO) ---
-                print(f"[Export] Guardando {len(structured_data)} posts estructurados en MongoDB...")
-                try:
-                    from database import Database
-                    db = Database() # Intenta conectar a localhost por defecto
-                    if db.is_connected:
-                        db.save_corpus(topic, structured_data)
-                    else:
-                         print("[Error] No hay conexión a MongoDB. Los datos no se persistirán.")
-                except Exception as e:
-                    print(f"[MongoDB Integration Error] {e}")
-                # --------------------------------------
-
-                # Return success indicator
-                csv_path = "mongodb_stored"
-                
+                     print("[Error] No hay conexión a MongoDB. Los datos no se persistirán.")
             except Exception as e:
-                print(f"Could not structure/save data: {e}")
-                import traceback
-                traceback.print_exc()
+                print(f"[MongoDB Integration Error] {e}")
+            # --------------------------------------
+
+            # Return success indicator
+            csv_path = "mongodb_stored"
+            
+        except Exception as e:
+            print(f"Could not structure/save data: {e}")
+            import traceback
+            traceback.print_exc()
 
     # 4. Ejecutar Pipeline de NLP
     print("\n[Orquestador] Iniciando procesamiento de NLP...")

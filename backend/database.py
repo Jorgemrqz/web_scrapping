@@ -111,3 +111,15 @@ class Database:
         except Exception as e:
             print(f"[MongoDB] Error recuperando análisis: {e}")
             return None
+
+    def get_analysis_history(self):
+        """Devuelve una lista de temas analizados y su fecha de actualización"""
+        if not self.is_connected: return []
+        try:
+            analysis_coll = self.db["analysis_results"]
+            # Proyección para traer solo topic y updated_at
+            cursor = analysis_coll.find({}, {"topic": 1, "updated_at": 1, "_id": 0}).sort("updated_at", -1)
+            return list(cursor)
+        except Exception as e:
+            print(f"[MongoDB] Error recuperando historial: {e}")
+            return []

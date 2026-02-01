@@ -14,11 +14,15 @@ app = FastAPI(title="Scraping & Analysis API")
 # Configurar CORS para permitir peticiones desde el frontend (Vue)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], # Vite default port
+    allow_origins=["*"], # Permitir todo para evitar problemas en desarrollo
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+def read_root():
+    return {"status": "ok", "message": "SentimentPulse API Running"}
 
 class ScrapeRequest(BaseModel):
     topic: str
@@ -64,6 +68,19 @@ def get_results(topic: str):
 
     # Fallback legacy or 404
     raise HTTPException(status_code=404, detail="Analysis not ready or not found in DB")
+
+@app.get("/history")
+def get_history():
+    """Devuelve el historial de búsquedas."""
+    try:
+        from database import Database
+        db = Database()
+        if db.is_connected:
+            return db.get_analysis_history()
+        return []
+    except Exception as e:
+        print(f"[API Error] {e}")
+        return []
 
 @app.get("/list-data")
 def list_data():

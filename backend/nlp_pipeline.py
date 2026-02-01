@@ -25,19 +25,17 @@ except LookupError:
 def load_data(data_dir="data", topic=None):
     all_posts = []
     
-    # 1. Try Loading JSON (New Format)
-    pattern_json = f"corpus_{topic}.json" if topic else "*.json"
-    json_files = glob.glob(os.path.join(data_dir, pattern_json))
-    
-    if json_files:
-        print(f"[NLP] Encontrados {len(json_files)} archivos JSON (filtro: {pattern_json})")
-        for file in json_files:
-            try:
-                with open(file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    
+    # Intentar cargar desde MongoDB (Fuente Única de Verdad)
+    try:
+        from database import Database
+        db = Database()
+        if db.is_connected:
+            raw_data = db.get_historical_data(topic)
+            if raw_data:
+                print(f"[NLP] Encontrados {len(raw_data)} registros en MongoDB para '{topic}'")
+                
                 # Flatten for NLP: Extraction of text is the goal
-                for post in data:
+                for post in raw_data:
                     # Generic keys mapping
                     p_text = post.get('content', '') or post.get('post_content', '')
                     
@@ -51,27 +49,13 @@ def load_data(data_dir="data", topic=None):
                         c_text = c.get('content', '')
                         if c_text:
                              all_posts.append({'content': c_text})
-                             
-            except Exception as e:
-                print(f"[NLP] Error leyendo {file}: {e}")
-                
-    # 2. Try Loading CSV (Legacy / Fallback)
-    if not all_posts:
-        pattern = f"corpus_{topic}.csv" if topic else "*.csv"
-        csv_files = glob.glob(os.path.join(data_dir, pattern))
-        
-        if csv_files:
-            print(f"[NLP] Encontrados {len(csv_files)} archivos CSV (filtro: {pattern})")
-            for file in csv_files:
-                try:
-                    import pandas as pd
-                    df = pd.read_csv(file)
-                    data = df.to_dict(orient='records')
-                    all_posts.extend(data)
-                except Exception as e:
-                    print(f"[NLP] Error leyendo {file}: {e}")
+            else:
+                print(f"[NLP] No se encontraron datos en MongoDB para '{topic}'.")
 
-    print(f"[NLP] Total de registros (docs) cargados: {len(all_posts)}")
+    except Exception as e:
+        print(f"[NLP] Error conectando a BD: {e}")
+                
+    print(f"[NLP] Total de registros (docs) cargados para NLP: {len(all_posts)}")
     return all_posts
 
 def clean_text(text):
@@ -172,9 +156,13 @@ def generate_visualizations(tokens, output_dir="data", topic=None):
     plt.xticks(rotation=45)
     plt.tight_layout()
     
-    freq_filename = f'frecuencia_palabras{suffix}.png'
-    plt.savefig(os.path.join(output_dir, freq_filename))
-    print(f"[NLP] Gráfico de frecuencias guardado en {output_dir}/{freq_filename}")
+    # NOTA: Se ha deshabilitado la generación de imágenes en disco por solicitud del usuario.
+    # En el futuro, estas imágenes podrían generarse en memoria (bytes) y guardarse en GridFS (Mongo)
+    # o enviarse en base64 al frontend.
+    print("[NLP] Generación de imágenes en disco DESHABILADA.")
+    # freq_filename = f'frecuencia_palabras{suffix}.png'
+    # plt.savefig(os.path.join(output_dir, freq_filename))
+    # print(f"[NLP] Gráfico de frecuencias guardado en {output_dir}/{freq_filename}")
     
     # b) Nube de Palabras
     text_for_cloud = " ".join(tokens)
@@ -186,14 +174,14 @@ def generate_visualizations(tokens, output_dir="data", topic=None):
     plt.title(f"Nube de Palabras {suffix}")
     plt.tight_layout()
     
-    wc_filename = f'wordcloud{suffix}.png'
-    plt.savefig(os.path.join(output_dir, wc_filename))
-    print(f"[NLP] WordCloud guardado en {output_dir}/{wc_filename}")
+    # wc_filename = f'wordcloud{suffix}.png'
+    # plt.savefig(os.path.join(output_dir, wc_filename))
+    # print(f"[NLP] WordCloud guardado en {output_dir}/{wc_filename}")
 
 def run_nlp_pipeline(topic=None):
-    # Asegurar directorio de datos
-    if not os.path.exists("data"):
-        os.makedirs("data")
+    # Asegurar directorio de datos (ya no es necesario si no se guardan archivos)
+    # if not os.path.exists("data"):
+    #     os.makedirs("data")
         
     # Cargar datos
     data = load_data(topic=topic)
@@ -202,12 +190,12 @@ def run_nlp_pipeline(topic=None):
         # Procesar
         all_tokens, processed_data = process_nlp(data)
         
-        # Visualizar
+        # Visualizar (Solo cálculo, sin guardar archivos)
         generate_visualizations(all_tokens, topic=topic)
         
         print("\n[NLP] Pipeline finalizado exitosamente.")
     else:
-        print("[NLP] No se encontraron datos para procesar. Ejecuta primero main_parallel.py")
+        print("[NLP] No se encontraron datos para procesar.")
 
 if __name__ == "__main__":
     run_nlp_pipeline()

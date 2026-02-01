@@ -106,7 +106,20 @@ body {
 
 .nav-links {
   list-style: none;
+  margin-bottom: 10px;
+}
+
+.sidebar-menu {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  /* Allow history to scroll if needed independently */
+}
+
+.nav-footer {
+  margin-top: auto;
+  padding-top: 20px;
 }
 
 .nav-links li {
@@ -825,8 +838,120 @@ tr:hover td {
   color: var(--accent-color);
 }
 
-.pagination-controls button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  border-color: transparent;
+/* History Section */
+.history-section {
+  margin-top: 25px;
+  /* More space from top */
+  padding: 0 16px;
+  /* Match sidebar padding */
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-left: 8px;
+}
+
+.history-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+.refresh-icon {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: transform 0.4s ease, color 0.2s;
+  padding: 4px;
+  border-radius: 50%;
+}
+
+.refresh-icon:hover {
+  color: var(--accent-color);
+  transform: rotate(180deg);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* Tighter gap */
+  max-height: 250px;
+  overflow-y: auto;
+  padding-right: 4px;
+  /* Space for scrollbar */
+}
+
+/* Custom Scrollbar for history */
+.history-list::-webkit-scrollbar {
+  width: 3px;
+}
+
+.history-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.history-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  width: 100%;
+  border: 1px solid transparent;
+  /* Prevent layout shift */
+  background: rgba(255, 255, 255, 0.02);
+  /* Very subtle background */
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  border-radius: 8px;
+  /* Slightly less rounded */
+  transition: all 0.2s ease;
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+}
+
+.history-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.history-item i {
+  font-size: 0.85rem;
+  color: var(--accent-color);
+  /* History icon color */
+  opacity: 0.8;
+}
+
+.history-item span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.history-empty {
+  padding: 15px 10px;
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  font-style: italic;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
 }
