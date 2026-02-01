@@ -22,11 +22,10 @@ const filteredData = computed(() => {
 const getIcon = (platform) => {
     if (!platform) return 'link';
     const p = platform.toLowerCase();
-    if (p.includes('twitter') || p.includes('x')) return 'twitter';
+    if (p.includes('twitter') || p.includes('x')) return 'x-twitter';
     if (p.includes('facebook')) return 'facebook';
     if (p.includes('linkedin')) return 'linkedin';
     if (p.includes('instagram')) return 'instagram';
-    if (p.includes('tiktok')) return 'tiktok';
     if (p.includes('reddit')) return 'reddit';
     return 'hashtag';
 };
@@ -45,6 +44,11 @@ const getPaginatedComments = (post) => {
     return (post.comments || []).slice(start, start + itemsPerCommentPage);
 };
 
+const getPlatformName = (p) => {
+    if (p.toLowerCase() === 'twitter') return 'X';
+    return p.charAt(0).toUpperCase() + p.slice(1);
+};
+
 </script>
 
 <template>
@@ -54,7 +58,7 @@ const getPaginatedComments = (post) => {
             <select v-if="dashboardData" v-model="platformFilter">
                 <option value="all">Todas</option>
                 <option v-for="p in Object.keys(dashboardData.stats.by_platform)" :key="p" :value="p">
-                    {{ p.charAt(0).toUpperCase() + p.slice(1) }}
+                    {{ getPlatformName(p) }}
                 </option>
             </select>
         </div>

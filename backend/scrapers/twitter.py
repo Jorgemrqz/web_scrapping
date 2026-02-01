@@ -330,6 +330,14 @@ def scrape_twitter(topic: str, username: str, password: str, target_count: int =
     results: List[Dict[str, str]] = []
     print(f"[X] Iniciando para: {topic} | Meta: {target_count} POSTS")
 
+    # Update DB status immediately to 'running'
+    try:
+        from database import Database
+        db = Database()
+        if db.is_connected:
+             db.update_stage_progress(topic, "twitter", 0, "running")
+    except: db = None
+
     # Intentar auto-arranque si está configurado remoto
     if config.X_REMOTE_DEBUGGING_URL:
         ensure_remote_browser()

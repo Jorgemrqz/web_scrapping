@@ -73,7 +73,7 @@ function startAnalysis() {
                 <div class="feature-item">
                     <div class="feature-icon"><i class="fa-solid fa-network-wired"></i></div>
                     <h3>Multi-Plataforma</h3>
-                    <p>Scraping simultáneo de Twitter, LinkedIn y más.</p>
+                    <p>Scraping simultáneo de X, LinkedIn y más.</p>
                 </div>
                 <div class="feature-item">
                     <div class="feature-icon"><i class="fa-solid fa-chart-line"></i></div>

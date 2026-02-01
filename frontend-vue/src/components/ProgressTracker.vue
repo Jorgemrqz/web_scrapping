@@ -30,7 +30,6 @@ function getIcon(platform) {
     if (p.includes('facebook')) return 'fa-brands fa-facebook';
     if (p.includes('linkedin')) return 'fa-brands fa-linkedin';
     if (p.includes('instagram')) return 'fa-brands fa-instagram';
-    if (p.includes('tiktok')) return 'fa-brands fa-tiktok';
     return 'fa-solid fa-globe';
 }
 
@@ -72,7 +71,7 @@ onUnmounted(() => {
                     <i :class="getIcon(platform)"></i>
                 </div>
                 <div class="stage-info">
-                    <span class="stage-name">{{ platform.charAt(0).toUpperCase() + platform.slice(1) }}</span>
+                    <span class="stage-name">{{ platform === 'twitter' ? 'X' : platform.charAt(0).toUpperCase() + platform.slice(1) }}</span>
                     <span class="stage-count">{{ data.current }} / {{ data.total }} posts</span>
                 </div>
                 <div class="stage-status">

@@ -23,6 +23,14 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
     results = []
     
     print(f"[Instagram] Iniciando scraper para #{hashtag} | Meta: {target_count} posts")
+    
+    # Update DB status immediately to 'running'
+    try:
+        from database import Database
+        db = Database()
+        if db.is_connected:
+             db.update_stage_progress(topic, "instagram", 0, "running")
+    except: db = None
 
     with sync_playwright() as p:
         # Configuración "Ninja"

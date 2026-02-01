@@ -114,7 +114,7 @@ function renderCharts() {
         platformChartInstance.value = new Chart(ctxPlatform, {
             type: 'bar',
             data: {
-                labels: platforms.map(p => p.charAt(0).toUpperCase() + p.slice(1)), 
+                labels: platforms.map(p => p.toLowerCase() === 'twitter' ? 'X' : p.charAt(0).toUpperCase() + p.slice(1)), 
                 datasets: datasets
             },
             options: {

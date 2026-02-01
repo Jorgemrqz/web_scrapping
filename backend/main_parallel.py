@@ -28,24 +28,25 @@ def worker(platform, topic, credentials, limit=15):
              db = Database()
         except: db = None
 
+        # Helper to get user/email
+        def get_user(c): return c.get("username") or c.get("email") or ""
+
+        # Update DB status to 'running' generic for worker start (failsafe)
+        if db and db.is_connected:
+             db.update_stage_progress(topic, platform, 0, "running")
+
         if platform == "facebook":
             # from scrapers.facebook import scrape_facebook # Already imported at top
-            return scrape_facebook(topic, credentials["email"], credentials["password"], limit)
+            return scrape_facebook(topic, credentials.get("email"), credentials.get("password"), limit)
         elif platform == "twitter":
             # from scrapers.twitter import scrape_twitter # Already imported at top
-            return scrape_twitter(topic, credentials["username"], credentials["password"], limit)
+            return scrape_twitter(topic, get_user(credentials), credentials.get("password"), limit)
         elif platform == "linkedin":
             # from scrapers.linkedin import scrape_linkedin # Already imported at top
-            return scrape_linkedin(topic, credentials["email"], credentials["password"], limit)
+            return scrape_linkedin(topic, credentials.get("email"), credentials.get("password"), limit)
         elif platform == "instagram":
             # from scrapers.instagram import scrape_instagram # Already imported at top
-            return scrape_instagram(topic, credentials["username"], credentials["password"], limit)
-        elif platform == "tiktok":
-             # Dummy implementation for now
-             print(f"[TikTok] Scraper no implementado aún. Retornando vacío.")
-             if db and db.is_connected:
-                 db.update_stage_progress(topic, "tiktok", 0, "completed")
-             return []
+            return scrape_instagram(topic, get_user(credentials), credentials.get("password"), limit)
         else:
             print(f"Plataforma desconocida: {platform}")
             return []
@@ -66,12 +67,11 @@ def run_pipeline(topic: str, limit: int = 10):
         from database import Database
         db = Database()
         if db.is_connected:
-            # Added tiktok to satisfy "5 networks" requirement
-            db.init_job_status(topic, ["twitter", "facebook", "linkedin", "instagram", "tiktok"], limit)
+            db.init_job_status(topic, ["twitter", "facebook", "linkedin", "instagram"], limit)
     except: db = None
 
     # Crear procesos
-    pool = multiprocessing.Pool(processes=5) # 5 Processes
+    pool = multiprocessing.Pool(processes=4) # 4 Processes
     
     tasks = []
     # Tarea Facebook
@@ -85,14 +85,6 @@ def run_pipeline(topic: str, limit: int = 10):
 
     # Tarea Instagram
     tasks.append(pool.apply_async(worker, ("instagram", topic, CREDENTIALS["instagram"], limit)))
-
-    # Tarea TikTok (Dummy/Future implementation)
-    # For now, we reuse another worker or create a dummy one. 
-    # Since we lack a scraper, we'll use a lambda that returns empty list immediately 
-    # BUT we need to update status to "completed" so the UI completes.
-    # We can't pickle lambda easily with multiprocessing. 
-    # We will use 'worker' but pass "tiktok". We need to handle "tiktok" inside 'worker' to not fail.
-    tasks.append(pool.apply_async(worker, ("tiktok", topic, {"username":"", "password":""}, limit)))
     
     # Recolectar resultados
     all_data = []
