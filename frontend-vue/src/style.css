@@ -136,12 +136,14 @@ body {
   font-weight: 600;
 }
 
-.nav-links li.disabled {
+.nav-links li.disabled-link {
   opacity: 0.5;
   cursor: not-allowed;
+  pointer-events: none;
+  /* Make unclickable */
 }
 
-.nav-links li.disabled:hover {
+.nav-links li.disabled-link:hover {
   background: transparent;
   color: var(--text-secondary);
 }

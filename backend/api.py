@@ -7,7 +7,18 @@ import json
 import uvicorn
 from main_parallel import run_pipeline
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="Scraping & Analysis API")
+
+# Configurar CORS para permitir peticiones desde el frontend (Vue)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], # Vite default port
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class ScrapeRequest(BaseModel):
     topic: str
@@ -36,6 +47,10 @@ async def start_scrape(req: ScrapeRequest, background_tasks: BackgroundTasks):
 def get_results(topic: str):
     """Devuelve el JSON de análisis si existe."""
     json_path = os.path.join("data", f"analysis_{topic}.json")
+    if not os.path.exists(json_path):
+        # Try lowercase as fallback (pipeline might normalize it)
+        json_path = os.path.join("data", f"analysis_{topic.lower()}.json")
+        
     if os.path.exists(json_path):
         with open(json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)

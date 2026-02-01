@@ -151,13 +151,26 @@ def run_pipeline(topic: str, limit: int = 10):
                 
                 structured_data.append(post_obj)
 
+            # ... (código existente de guardado JSON)
             with open(json_path, 'w', encoding='utf-8') as f:
                 json.dump(structured_data, f, indent=2, ensure_ascii=False)
                 
             print(f"[Export] Datos guardados en formato JSON estructurado: {json_name}")
+            
+            # --- GUARDADO EN MONGODB (OPCIONAL) ---
+            try:
+                from database import Database
+                db = Database() # Intenta conectar a localhost por defecto
+                if db.is_connected:
+                    db.save_corpus(topic, structured_data)
+            except Exception as e:
+                print(f"[MongoDB Integration Error] {e}")
+            # --------------------------------------
+
             csv_path = json_path # Update variable for return, though it's a json now
             
         except Exception as e:
+# ... (resto del código)
             print(f"Could not save JSON: {e}")
             import traceback
             traceback.print_exc()
