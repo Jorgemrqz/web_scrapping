@@ -46,9 +46,19 @@ def scrape_linkedin(topic, email, password, target_count=10):
             
             total_posts_extracted = 0
             
+            # Intento de reconexión DB
+            try:
+                from database import Database
+                db = Database()
+            except: db = None
+
             while total_posts_extracted < target_count and scroll_attempts_without_new < 15:
                 
                 print(f"[LinkedIn] Escaneando... (Posts procesados: {total_posts_extracted}/{target_count})")
+
+                # Report Progress
+                if db and db.is_connected:
+                    db.update_stage_progress(topic, "linkedin", total_posts_extracted, "running")
                 
                 found_posts = []
                 # Filtro regex más amplio para asegurar que detectamos el botón
@@ -172,6 +182,10 @@ def scrape_linkedin(topic, email, password, target_count=10):
                         })
                         new_in_pass += 1
                         total_posts_extracted += 1 # Contamos POSTS
+                        
+                        if db and db.is_connected:
+                            db.update_stage_progress(topic, "linkedin", total_posts_extracted, "running")
+
                         print(f"[LinkedIn] > Post: {author[:20]} ({total_posts_extracted}/{target_count})")
 
                         # -- APERTURA DE COMENTARIOS --
@@ -356,6 +370,8 @@ def scrape_linkedin(topic, email, password, target_count=10):
                             time.sleep(3)
                 except: pass
 
+            if db and db.is_connected:
+                db.update_stage_progress(topic, "linkedin", total_posts_extracted, "completed")
             print(f"[LinkedIn] Finalizado. Total: {len(results)}")
             
         except Exception as e:

@@ -83,9 +83,20 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
             target_urls = list(post_urls)[:target_count]
             print(f"[Instagram] Se procesarán {len(target_urls)} posts.")
 
+            # Intento de reconexión DB
+            try:
+                from database import Database
+                db = Database()
+            except: db = None
+
             # 3. Procesar cada Post
             for i, p_url in enumerate(target_urls):
                 print(f"\n[Instagram] ({i+1}/{len(target_urls)}) Procesando: {p_url}")
+                
+                 # Report Progress
+                if db and db.is_connected:
+                    db.update_stage_progress(topic, "instagram", i+1, "running")
+
                 try:
                     page.goto(p_url, wait_until="domcontentloaded")
                     time.sleep(3)
@@ -285,6 +296,9 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
 
                 except Exception as e:
                     print(f"[Error] Fallo procesando {p_url}: {e}")
+
+            if db and db.is_connected:
+                db.update_stage_progress(topic, "instagram", len(target_urls), "completed")
 
         except Exception as e:
             print(f"[Error Global] {e}")

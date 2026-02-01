@@ -158,9 +158,19 @@ def scrape_facebook(topic, email, password, target_count=10):
             
             feed_locator = None 
             
+            # Intento de reconexión DB por si acaso
+            try:
+                from database import Database
+                db = Database()
+            except: db = None
+
             # Bucle Principal de Recolección
             while posts_scraped < target_count and scroll_attempts < max_scrolls_total:
                 
+                # Report Progress
+                if db and db.is_connected:
+                    db.update_stage_progress(topic, "facebook", posts_scraped, "running")
+
                 # 1. Identificar posts actuales
                 feed = page.locator('div[role="feed"]')
                 if feed.count() == 0: feed = page.locator('div[role="main"]')
@@ -224,7 +234,7 @@ def scrape_facebook(topic, email, password, target_count=10):
                                 post_author = post_author.replace("\n", " ").replace("Seguir", "").replace("·", "").strip()
                                 # Si quedaron espacios dobles
                                 post_author = re.sub(r'\s+', ' ', post_author).strip()
-
+                            
                             # Texto: Estrategia Mejorada
                             post_content = "Sin texto / Solo media"
                             # Buscamos bloques de texto significativos
@@ -318,6 +328,8 @@ def scrape_facebook(topic, email, password, target_count=10):
                                 "comment_content": ""
                             })
                             posts_scraped += 1
+                            if db and db.is_connected:
+                                db.update_stage_progress(topic, "facebook", posts_scraped, "running")
                             processed_posts_indices.add(i)
                             continue
                             
@@ -451,6 +463,8 @@ def scrape_facebook(topic, email, password, target_count=10):
                         pass
                     
                     posts_scraped += 1
+                    if db and db.is_connected:
+                        db.update_stage_progress(topic, "facebook", posts_scraped, "running")
                     processed_posts_indices.add(i)
                     
                 # 3. Decidir si hacer scroll
@@ -464,6 +478,9 @@ def scrape_facebook(topic, email, password, target_count=10):
                     # Chequeo anti-bucle si no carga nada nuevo
                     new_post_count = posts.count() # (Este count podría ser stale, pero page.mouse.wheel refresca DOM)
                     # En Playwright 'posts' es localizador dinámico, posts.count() se reevalúa.
+            
+            if db and db.is_connected:
+                 db.update_stage_progress(topic, "facebook", posts_scraped, "completed")
             
             print(f"[Facebook] Finalizado. Total comentarios: {len(results)}")
             

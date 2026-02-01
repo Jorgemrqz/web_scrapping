@@ -161,3 +161,60 @@ class Database:
         except Exception as e:
             print(f"[MongoDB] Error eliminando historial: {e}")
             return False
+
+    def init_job_status(self, topic, platforms, limit):
+        """Inicializa el estado de un trabajo de scraping"""
+        if not self.is_connected: return
+        try:
+            status_coll = self.db["job_status"]
+            stages = {}
+            for p in platforms:
+                stages[p] = {"current": 0, "total": limit, "status": "pending"}
+            
+            doc = {
+                "topic": topic,
+                "stages": stages,
+                "llm_status": "pending", # pending, running, completed
+                "updated_at": datetime.now()
+            }
+            status_coll.update_one({"topic": topic}, {"$set": doc}, upsert=True)
+        except Exception as e:
+            print(f"[MongoDB] Error inicilizando status: {e}")
+
+    def update_stage_progress(self, topic, platform, current, status="running"):
+        """Actualiza el progreso de una plataforma específica"""
+        if not self.is_connected: return
+        try:
+            status_coll = self.db["job_status"]
+            update_field = f"stages.{platform}"
+            status_coll.update_one(
+                {"topic": topic},
+                {"$set": {
+                    f"{update_field}.current": current,
+                    f"{update_field}.status": status,
+                    "updated_at": datetime.now()
+                }}
+            )
+        except Exception as e:
+            print(f"[MongoDB] Error actualizando progreso {platform}: {e}")
+
+    def update_llm_status(self, topic, status):
+        """Actualiza el estado del LLM"""
+        if not self.is_connected: return
+        try:
+            status_coll = self.db["job_status"]
+            status_coll.update_one(
+                {"topic": topic},
+                {"$set": {"llm_status": status, "updated_at": datetime.now()}}
+            )
+        except Exception as e:
+            print(f"[MongoDB] Error actualizando LLM status: {e}")
+
+    def get_job_status(self, topic):
+        """Obtiene el estado actual del job"""
+        if not self.is_connected: return None
+        try:
+            status_coll = self.db["job_status"]
+            return status_coll.find_one({"topic": topic}, {"_id": 0})
+        except Exception as e:
+             return None

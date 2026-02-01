@@ -69,6 +69,23 @@ def get_results(topic: str):
     # Fallback legacy or 404
     raise HTTPException(status_code=404, detail="Analysis not ready or not found in DB")
 
+@app.get("/status/{topic}")
+def get_status(topic: str):
+    """Devuelve el estado del proceso de scraping y análisis."""
+    try:
+        from database import Database
+        db = Database()
+        if db.is_connected:
+            status = db.get_job_status(topic)
+            if status:
+                return status
+            else:
+                return {"status": "unknown"}
+        return {"status": "db_error"}
+    except Exception as e:
+        print(f"[API Error] Status: {e}")
+        return {"status": "error"}
+
 @app.get("/history")
 def get_history():
     """Devuelve el historial de búsquedas."""

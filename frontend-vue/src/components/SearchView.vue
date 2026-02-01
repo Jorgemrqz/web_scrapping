@@ -1,4 +1,7 @@
 <script setup>
+import { defineAsyncComponent } from 'vue';
+import ProgressTracker from './ProgressTracker.vue';
+
 defineProps({
     topic: String,
     limit: Number,
@@ -22,7 +25,8 @@ function startAnalysis() {
                 <p>Empieza a analizar la opinión pública en tiempo real.</p>
             </div>
 
-            <div class="search-card glass-card">
+            <!-- SEARCH CARD (Hidden while loading to show progress) -->
+            <div v-if="!isLoading" class="search-card glass-card">
                 <div class="input-wrapper">
                     <i class="fa-solid fa-magnifying-glass search-icon"></i>
                     <input 
@@ -46,16 +50,21 @@ function startAnalysis() {
                     >
                 </div>
 
-                <button id="analyzeBtn" @click="startAnalysis" :disabled="isLoading">
-                    <span v-if="!isLoading" class="btn-text">Iniciar Análisis Inteligente</span>
-                    <div v-else class="loader"></div>
+                <button id="analyzeBtn" @click="startAnalysis">
+                    <span class="btn-text">Iniciar Análisis Inteligente</span>
                 </button>
                 
                 <p class="status-message" :class="statusColor">{{ statusText }}</p>
             </div>
 
-            <!-- FEATURES GRID -->
-            <div class="features-grid">
+            <!-- PROGRESS TRACKER (Shown when loading) -->
+            <div v-else class="progress-container">
+                 <ProgressTracker :topic="topic" apiUrl="http://127.0.0.1:8000" />
+                 <p class="status-message" :class="statusColor" style="text-align: center; margin-top: 15px;">{{ statusText }}</p>
+            </div>
+
+            <!-- FEATURES GRID (Always visible or maybe hide during load?) -->
+            <div v-if="!isLoading" class="features-grid">
                 <div class="feature-item">
                     <div class="feature-icon"><i class="fa-solid fa-robot"></i></div>
                     <h3>IA Avanzada</h3>

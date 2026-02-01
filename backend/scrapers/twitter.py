@@ -409,9 +409,19 @@ def scrape_twitter(topic: str, username: str, password: str, target_count: int =
             
             collected_comments = 0
             
-            # --- BUCLE PRINCIPAL (Por Post) ---
+            # Inicializar DB para reporte de progreso
+            try:
+                from database import Database
+                db = Database()
+            except: db = None
+
+             # --- BUCLE PRINCIPAL (Por Post) ---
             while post_idx < target_count and scrolls < MAX_SCROLLS:
                 print(f"[X] Progreso: {post_idx}/{target_count} posts procesados. Feed scroll {scrolls}...")
+                
+                # Actualizar DB
+                if db and db.is_connected:
+                    db.update_stage_progress(topic, "twitter", post_idx, "running")
                 
                 # 1. Identificar Tweets en pantalla
                 tweets = page.locator('article[data-testid="tweet"]')
@@ -485,6 +495,10 @@ def scrape_twitter(topic: str, username: str, password: str, target_count: int =
                 human_delay(2.0)
                 scrolls += 1
             
+            # Final Update
+            if db and db.is_connected:
+                db.update_stage_progress(topic, "twitter", post_idx, "completed")
+
             print(f"[X] Finalizado. {post_idx} posts procesados. {collected_comments} respuestas extraídas.")
 
         except TimeoutError:

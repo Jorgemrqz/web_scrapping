@@ -52,6 +52,14 @@ def run_pipeline(topic: str, limit: int = 10):
     """
     print(f"\n[Orquestador] Iniciando extracción PARALELA para '{topic}' (Límite: {limit})...")
     
+    # Init DB Status
+    try:
+        from database import Database
+        db = Database()
+        if db.is_connected:
+            db.init_job_status(topic, ["twitter", "facebook", "linkedin", "instagram"], limit)
+    except: db = None
+
     # Crear procesos
     pool = multiprocessing.Pool(processes=4) # Número de redes a scrapear
     
@@ -89,16 +97,16 @@ def run_pipeline(topic: str, limit: int = 10):
         # Create DataFrame
         df = pd.DataFrame(all_data)
 
-        # FASE 1.5: GUARDADO INTERMEDIO (OMITIDO - SOLO MEMORIA)
-        # raw_csv_name = f"corpus_{topic}_raw.csv"
-        # raw_path = os.path.join("data", raw_csv_name)
-        # df.to_csv(raw_path, index=False, encoding='utf-8-sig')
-        # print(f"[Backup] Datos crudos guardados en: {raw_csv_name}")
-
         # FASE 2: PROCESAMIENTO CON LLMs 
         try:
             print("\n[INFO] Iniciando Fase 2: Clasificación de Sentimiento con LLMs...")
+            if db and db.is_connected:
+                db.update_llm_status(topic, "running")
+
             df = process_dataframe_concurrently(df)
+            
+            if db and db.is_connected:
+                db.update_llm_status(topic, "completed")
             print("[INFO] Fase 2 completada.")
         except Exception as e:
             print(f"\n[WARN] No se pudo ejecutar el análisis de LLMs: {e}")
