@@ -30,6 +30,7 @@ function getIcon(platform) {
     if (p.includes('facebook')) return 'fa-brands fa-facebook';
     if (p.includes('linkedin')) return 'fa-brands fa-linkedin';
     if (p.includes('instagram')) return 'fa-brands fa-instagram';
+    if (p.includes('tiktok')) return 'fa-brands fa-tiktok';
     return 'fa-solid fa-globe';
 }
 

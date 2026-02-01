@@ -7,10 +7,8 @@ const props = defineProps({
 
 const platformFilter = ref('all');
 const sentimentFilter = ref('all');
-const currentPage = ref(1);
-const itemsPerPage = 5;
 
-// Computed Properties for filtering and pagination
+// Computed Properties for filtering
 const filteredData = computed(() => {
     if (!props.dashboardData) return [];
     
@@ -21,28 +19,6 @@ const filteredData = computed(() => {
     });
 });
 
-const totalPages = computed(() => Math.ceil(filteredData.value.length / itemsPerPage));
-
-const paginatedData = computed(() => {
-    const start = (currentPage.value - 1) * itemsPerPage;
-    const end = start + itemsPerPage;
-    return filteredData.value.slice(start, end);
-});
-
-// Watchers
-watch([platformFilter, sentimentFilter], () => {
-    currentPage.value = 1;
-});
-
-// Methods
-function nextPage() {
-    if (currentPage.value < totalPages.value) currentPage.value++;
-}
-
-function prevPage() {
-    if (currentPage.value > 1) currentPage.value--;
-}
-
 const getIcon = (platform) => {
     if (!platform) return 'link';
     const p = platform.toLowerCase();
@@ -50,6 +26,7 @@ const getIcon = (platform) => {
     if (p.includes('facebook')) return 'facebook';
     if (p.includes('linkedin')) return 'linkedin';
     if (p.includes('instagram')) return 'instagram';
+    if (p.includes('tiktok')) return 'tiktok';
     if (p.includes('reddit')) return 'reddit';
     return 'hashtag';
 };
@@ -62,21 +39,12 @@ const getSentimentClass = (text) => {
 };
 
 const getPaginatedComments = (post) => {
-    // Ensure commentPage exists, injected during loadDashboard in parent or init defaults here?
-    // It's safer to init here if missing, but modifying prop is bad.
-    // However, `post` is an object inside the prop array. Vue allows distinct mutation of objects in props 
-    // but it's not ideal.
-    // Better: use a local WeakMap or reactive wrapper.
-    // For simplicity given the code, we assume 'commentPage' is added by parent or we handle it.
-    // Let's rely on parent injecting it OR handle it via `post.commentPage || 1`.
-    
     const page = post.commentPage || 1;
-    const start = (page - 1) * 5;
-    return (post.comments || []).slice(start, start + 5);
+    const itemsPerCommentPage = 5;
+    const start = (page - 1) * itemsPerCommentPage;
+    return (post.comments || []).slice(start, start + itemsPerCommentPage);
 };
 
-// Modifying prop object (post.commentPage) directly is common in simple Vue apps but anti-pattern.
-// We will accept it for now as per previous implementation logic.
 </script>
 
 <template>
@@ -111,8 +79,8 @@ const getPaginatedComments = (post) => {
                 </tr>
             </thead>
             <tbody>
-                <!-- Iterate over paginatedData instead of filteredData -->
-                <template v-for="(post, idx) in paginatedData" :key="idx">
+                <!-- Iterate over all filteredData directly (No Pagination on Posts) -->
+                <template v-for="(post, idx) in filteredData" :key="idx">
                     <!-- Post Row -->
                     <tr class="post-row">
                         <td style="width: 200px;">
@@ -144,37 +112,31 @@ const getPaginatedComments = (post) => {
                             <span :class="getSentimentClass(comment.sentiment)" style="opacity: 0.8; font-size: 0.85em;">{{ comment.sentiment || 'Neutro' }}</span>
                         </td>
                     </tr>
-                    <!-- Filler Rows (Maintain constant height) -->
-                    <template v-if="post.comments.length > 5 && getPaginatedComments(post).length < 5">
-                        <tr v-for="n in (5 - getPaginatedComments(post).length)" :key="`filler-${idx}-${n}`">
-                            <td style="padding-left: 30px; border-bottom: 1px dashed var(--glass-border);">&nbsp;</td>
-                            <td style="border-bottom: 1px dashed var(--glass-border); color: transparent;">Filler</td>
-                            <td style="border-bottom: 1px dashed var(--glass-border);">&nbsp;</td>
-                        </tr>
-                    </template>
+                    <!-- Filler Rows (Maintain constant height for comments section if desired, or remove to just collapse) -->
+                    <!-- Removed Filler Rows to save space since we have infinite scroll -->
 
                     <!-- Comment Pagination Controls -->
                     <tr v-if="post.comments.length > 5">
                         <td colspan="3" style="text-align: center; border-bottom: 1px solid var(--glass-border); padding: 8px;">
                             <div style="display: flex; justify-content: center; align-items: center; gap: 15px; font-size: 0.85em; color: var(--text-secondary);">
                                 <button 
-                                    @click="post.commentPage--" 
-                                    :disabled="post.commentPage === 1"
+                                    @click="post.commentPage = (post.commentPage || 1) - 1" 
+                                    :disabled="(post.commentPage || 1) === 1"
                                     style="background: transparent; border: 1px solid var(--glass-border); color: var(--accent-color); padding: 2px 8px; border-radius: 4px; cursor: pointer;"
-                                    :style="{ opacity: post.commentPage === 1 ? 0.5 : 1 }"
+                                    :style="{ opacity: (post.commentPage || 1) === 1 ? 0.5 : 1 }"
                                 >
                                     <i class="fa-solid fa-chevron-left"></i>
                                 </button>
                                 
                                 <span>
-                                    Pág. {{ post.commentPage }} / {{ Math.ceil(post.comments.length / 5) }}
+                                    Pág. {{ post.commentPage || 1 }} / {{ Math.ceil(post.comments.length / 5) }}
                                 </span>
 
                                 <button 
-                                    @click="post.commentPage++" 
-                                    :disabled="post.commentPage >= Math.ceil(post.comments.length / 5)"
+                                    @click="post.commentPage = (post.commentPage || 1) + 1" 
+                                    :disabled="(post.commentPage || 1) >= Math.ceil(post.comments.length / 5)"
                                     style="background: transparent; border: 1px solid var(--glass-border); color: var(--accent-color); padding: 2px 8px; border-radius: 4px; cursor: pointer;"
-                                    :style="{ opacity: post.commentPage >= Math.ceil(post.comments.length / 5) ? 0.5 : 1 }"
+                                    :style="{ opacity: (post.commentPage || 1) >= Math.ceil(post.comments.length / 5) ? 0.5 : 1 }"
                                 >
                                     <i class="fa-solid fa-chevron-right"></i>
                                 </button>
@@ -183,17 +145,12 @@ const getPaginatedComments = (post) => {
                     </tr>
                 </template>
 
-                <tr v-if="paginatedData.length === 0">
+                <tr v-if="filteredData.length === 0">
                     <td colspan="3" style="text-align: center; padding: 20px;">No hay datos para mostrar con estos filtros.</td>
                 </tr>
             </tbody>
         </table>
         
-        <!-- Pagination Controls -->
-        <div class="pagination-controls" v-if="totalPages > 1">
-            <button :disabled="currentPage === 1" @click="prevPage" title="Anterior"><i class="fa-solid fa-arrow-left"></i> Anterior</button>
-            <span style="font-weight: 600; color: var(--accent-color);">Página {{ currentPage }} / {{ totalPages }}</span>
-            <button :disabled="currentPage === totalPages" @click="nextPage" title="Siguiente">Siguiente <i class="fa-solid fa-arrow-right"></i></button>
-        </div>
+        <!-- Post Pagination Removed -->
     </div>
 </template>
