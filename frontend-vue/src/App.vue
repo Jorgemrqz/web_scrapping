@@ -387,19 +387,46 @@ function switchTab(tab) {
                     <table>
                         <thead>
                             <tr>
-                                <th>Red</th>
+                                <th>Red / Autor</th>
+                                <th>Contenido</th>
                                 <th>Sentimiento</th>
-                                <th>Comentario / Post</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="(row, idx) in filteredData" :key="idx">
-                                <td>
-                                    <i :class="`fa-brands fa-${getIcon(row.platform)}`"></i> {{ row.platform }}
-                                </td>
-                                <td><span :class="getSentimentClass(row.sentiment_llm)">{{ row.sentiment_llm }}</span></td>
-                                <td>{{ row.post_content ? row.post_content.substring(0, 100) + (row.post_content.length > 100 ? '...' : '') : '' }}</td>
-                            </tr>
+                            <template v-for="(post, idx) in filteredData" :key="idx">
+                                <!-- Post Row -->
+                                <tr class="post-row">
+                                    <td style="width: 200px;">
+                                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                                            <span><i :class="`fa-brands fa-${getIcon(post.platform)}`"></i> <strong>{{ post.platform }}</strong></span>
+                                            <span style="font-size: 0.8em; opacity: 0.7;">{{ post.author || 'Anónimo' }}</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div style="font-weight: 500; margin-bottom: 5px;">{{ post.content }}</div>
+                                        <div v-if="post.comments && post.comments.length" style="font-size: 0.85em; opacity: 0.8;">
+                                            <i class="fa-solid fa-comments"></i> {{ post.comments.length }} comentarios
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span :class="getSentimentClass(post.sentiment_llm)">{{ post.sentiment_llm || 'Neutro' }}</span>
+                                    </td>
+                                </tr>
+                                <!-- Comments Rows (Nested) -->
+                                <tr v-for="(comment, cIdx) in post.comments" :key="`${idx}-c-${cIdx}`" class="comment-row">
+                                    <td style="padding-left: 30px; border-bottom: 1px dashed var(--glass-border);">
+                                        <i class="fa-solid fa-reply" style="transform: rotate(180deg); margin-right: 5px; opacity: 0.5;"></i> 
+                                        {{ comment.author || 'Usuario' }}
+                                    </td>
+                                    <td style="border-bottom: 1px dashed var(--glass-border); color: #cbd5e1;">
+                                        {{ comment.content }}
+                                    </td>
+                                    <td style="border-bottom: 1px dashed var(--glass-border);">
+                                        <span :class="getSentimentClass(comment.sentiment)" style="opacity: 0.8; font-size: 0.85em;">{{ comment.sentiment || 'Neutro' }}</span>
+                                    </td>
+                                </tr>
+                            </template>
+
                             <tr v-if="filteredData.length === 0">
                                 <td colspan="3" style="text-align: center; padding: 20px;">No hay datos para mostrar con estos filtros.</td>
                             </tr>

@@ -74,12 +74,28 @@ def perform_analysis(csv_path, topic, df=None):
     story = processor.generate_storytelling(topic, stats_package)
 
     # 5. Estructura Final para el Frontend
+    
+    # Try to load structured data for the "Explorador de Datos"
+    # The DF is flat, but we saved a richer JSON in main_parallel.py
+    structured_data = []
+    json_path = f"data/corpus_{topic}.json"
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                structured_data = json.load(f)
+        except Exception as e:
+            print(f"[Analysis] Could not load structured JSON: {e}")
+            structured_data = df.head(50).to_dict(orient="records") # Fallback
+    else:
+        # Fallback to DF if JSON doesn't exist
+        structured_data = df.head(100).to_dict(orient="records")
+
     final_output = {
         "topic": topic,
         "total_posts": total,
         "stats": stats_package,
         "storytelling": story,
-        "data_preview": df.head(10).to_dict(orient="records") # Para mostrar tabla rápida
+        "data_preview": structured_data # Now sending FULL structured list
     }
 
     # Guardar JSON
