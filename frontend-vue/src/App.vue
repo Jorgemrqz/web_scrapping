@@ -21,9 +21,10 @@ const dashboardData = ref(null);
 const globalChartInstance = ref(null);
 const platformChartInstance = ref(null);
 
-// Filtros de Tabla
 const platformFilter = ref('all');
 const sentimentFilter = ref('all');
+const currentPage = ref(1);
+const itemsPerPage = 5;
 
 // --- Computed ---
 const metricPos = computed(() => {
@@ -52,12 +53,35 @@ const metricTotal = computed(() => getTotal());
 const filteredData = computed(() => {
     if (!dashboardData.value) return [];
     
+    // First apply filters
     return dashboardData.value.data_preview.filter(row => {
         const matchPlatform = platformFilter.value === 'all' || row.platform.toLowerCase() === platformFilter.value.toLowerCase();
         const matchSentiment = sentimentFilter.value === 'all' || (row.sentiment_llm && row.sentiment_llm.includes(sentimentFilter.value));
         return matchPlatform && matchSentiment;
     });
 });
+
+const totalPages = computed(() => Math.ceil(filteredData.value.length / itemsPerPage));
+
+const paginatedData = computed(() => {
+    const start = (currentPage.value - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    return filteredData.value.slice(start, end);
+});
+
+// Watch filters to reset page
+import { watch } from 'vue';
+watch([platformFilter, sentimentFilter], () => {
+    currentPage.value = 1;
+});
+
+function nextPage() {
+    if (currentPage.value < totalPages.value) currentPage.value++;
+}
+
+function prevPage() {
+    if (currentPage.value > 1) currentPage.value--;
+}
 
 const quickInsight = computed(() => {
     if (!dashboardData.value) return 'Generando resumen...';
@@ -85,8 +109,8 @@ function toggleSidebar() {
     isSidebarCollapsed.value = !isSidebarCollapsed.value;
     // Resize charts after transition (300ms matches CSS transition)
     setTimeout(() => {
-        if (globalChartInstance.value) globalChartInstance.value.resize();
-        if (platformChartInstance.value) platformChartInstance.value.resize();
+        if (activeTab.value === 'overview' && globalChartInstance.value) globalChartInstance.value.resize();
+        if (activeTab.value === 'platforms' && platformChartInstance.value) platformChartInstance.value.resize();
     }, 350);
 }
 
@@ -151,6 +175,15 @@ function pollResults() {
 }
 
 function loadDashboard(data) {
+    console.log("✅ LIVE: Dashboard loaded. Pagination active (5 items).");
+    
+    // Inject expanded state for comments
+    if (data.data_preview) {
+        data.data_preview.forEach(row => {
+            row.commentPage = 1; 
+        });
+    }
+
     dashboardData.value = data;
     isLoading.value = false;
     currentView.value = 'dashboard';
@@ -275,6 +308,11 @@ const getSentimentClass = (text) => {
     if (text.includes('Positivo')) return 'tag-pos';
     if (text.includes('Negativo')) return 'tag-neg';
     return 'tag-neu';
+};
+
+const getPaginatedComments = (post) => {
+    const start = (post.commentPage - 1) * 5;
+    return post.comments.slice(start, start + 5);
 };
 </script>
 
@@ -488,7 +526,8 @@ const getSentimentClass = (text) => {
                             </tr>
                         </thead>
                         <tbody>
-                            <template v-for="(post, idx) in filteredData" :key="idx">
+                            <!-- Iterate over paginatedData instead of filteredData -->
+                            <template v-for="(post, idx) in paginatedData" :key="idx">
                                 <!-- Post Row -->
                                 <tr class="post-row">
                                     <td style="width: 200px;">
@@ -507,8 +546,8 @@ const getSentimentClass = (text) => {
                                         <span :class="getSentimentClass(post.sentiment_llm)">{{ post.sentiment_llm || 'Neutro' }}</span>
                                     </td>
                                 </tr>
-                                <!-- Comments Rows (Nested) -->
-                                <tr v-for="(comment, cIdx) in post.comments" :key="`${idx}-c-${cIdx}`" class="comment-row">
+                                <!-- Comments Rows (Nested with Pagination) -->
+                                <tr v-for="(comment, cIdx) in getPaginatedComments(post)" :key="`${idx}-c-${cIdx}`" class="comment-row">
                                     <td style="padding-left: 30px; border-bottom: 1px dashed var(--glass-border);">
                                         <i class="fa-solid fa-reply" style="transform: rotate(180deg); margin-right: 5px; opacity: 0.5;"></i> 
                                         {{ comment.author || 'Usuario' }}
@@ -520,13 +559,57 @@ const getSentimentClass = (text) => {
                                         <span :class="getSentimentClass(comment.sentiment)" style="opacity: 0.8; font-size: 0.85em;">{{ comment.sentiment || 'Neutro' }}</span>
                                     </td>
                                 </tr>
+                                <!-- Filler Rows (Maintain constant height) -->
+                                <template v-if="post.comments.length > 5 && getPaginatedComments(post).length < 5">
+                                    <tr v-for="n in (5 - getPaginatedComments(post).length)" :key="`filler-${idx}-${n}`">
+                                        <td style="padding-left: 30px; border-bottom: 1px dashed var(--glass-border);">&nbsp;</td>
+                                        <td style="border-bottom: 1px dashed var(--glass-border); color: transparent;">Filler</td>
+                                        <td style="border-bottom: 1px dashed var(--glass-border);">&nbsp;</td>
+                                    </tr>
+                                </template>
+
+                                <!-- Comment Pagination Controls -->
+                                <tr v-if="post.comments.length > 5">
+                                    <td colspan="3" style="text-align: center; border-bottom: 1px solid var(--glass-border); padding: 8px;">
+                                        <div style="display: flex; justify-content: center; align-items: center; gap: 15px; font-size: 0.85em; color: var(--text-secondary);">
+                                            <button 
+                                                @click="post.commentPage--" 
+                                                :disabled="post.commentPage === 1"
+                                                style="background: transparent; border: 1px solid var(--glass-border); color: var(--accent-color); padding: 2px 8px; border-radius: 4px; cursor: pointer;"
+                                                :style="{ opacity: post.commentPage === 1 ? 0.5 : 1 }"
+                                            >
+                                                <i class="fa-solid fa-chevron-left"></i>
+                                            </button>
+                                            
+                                            <span>
+                                                Pág. {{ post.commentPage }} / {{ Math.ceil(post.comments.length / 5) }}
+                                            </span>
+
+                                            <button 
+                                                @click="post.commentPage++" 
+                                                :disabled="post.commentPage >= Math.ceil(post.comments.length / 5)"
+                                                style="background: transparent; border: 1px solid var(--glass-border); color: var(--accent-color); padding: 2px 8px; border-radius: 4px; cursor: pointer;"
+                                                :style="{ opacity: post.commentPage >= Math.ceil(post.comments.length / 5) ? 0.5 : 1 }"
+                                            >
+                                                <i class="fa-solid fa-chevron-right"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
                             </template>
 
-                            <tr v-if="filteredData.length === 0">
+                            <tr v-if="paginatedData.length === 0">
                                 <td colspan="3" style="text-align: center; padding: 20px;">No hay datos para mostrar con estos filtros.</td>
                             </tr>
                         </tbody>
                     </table>
+                    
+                    <!-- Pagination Controls -->
+                    <div class="pagination-controls" v-if="totalPages > 1">
+                        <button :disabled="currentPage === 1" @click="prevPage" title="Anterior"><i class="fa-solid fa-arrow-left"></i> Anterior</button>
+                        <span style="font-weight: 600; color: var(--accent-color);">Página {{ currentPage }} / {{ totalPages }}</span>
+                        <button :disabled="currentPage === totalPages" @click="nextPage" title="Siguiente">Siguiente <i class="fa-solid fa-arrow-right"></i></button>
+                    </div>
                 </div>
             </div>
 

@@ -71,3 +71,43 @@ class Database:
         """Recupera todos los posts de un tema"""
         if not self.is_connected: return []
         return list(self.collection.find({"topic": topic}, {"_id": 0}))
+
+    def save_analysis(self, topic, analysis_data):
+        """Guarda el resultado del análisis (stats, charts, storytelling) en una colección separada"""
+        if not self.is_connected: return False
+        try:
+            analysis_coll = self.db["analysis_results"]
+            doc = {
+                "topic": topic,
+                "data": analysis_data,
+                "updated_at": datetime.now()
+            }
+            # Upsert
+            analysis_coll.update_one(
+                {"topic": topic},
+                {"$set": doc},
+                upsert=True
+            )
+            print(f"[MongoDB] Análisis guardado para '{topic}'")
+            return True
+        except Exception as e:
+            print(f"[MongoDB] Error guardando análisis: {e}")
+            return False
+
+    def get_analysis(self, topic):
+        """Recupera el análisis más reciente para un tema"""
+        if not self.is_connected: return None
+        try:
+            analysis_coll = self.db["analysis_results"]
+            # Buscar coincidencia exacta o case-insensitive
+            res = analysis_coll.find_one({"topic": topic})
+            if not res:
+                # Try regex for case insensitive
+                res = analysis_coll.find_one({"topic": {"$regex": f"^{topic}$", "$options": "i"}})
+            
+            if res:
+                return res["data"]
+            return None
+        except Exception as e:
+            print(f"[MongoDB] Error recuperando análisis: {e}")
+            return None
