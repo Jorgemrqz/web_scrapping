@@ -75,19 +75,25 @@ def perform_analysis(csv_path, topic, df=None):
 
     # 5. Estructura Final para el Frontend
     
-    # Try to load structured data for the "Explorador de Datos"
-    # The DF is flat, but we saved a richer JSON in main_parallel.py
+    # Intentar cargar datos estructurados desde MongoDB
+    # (Ya que main_parallel los guardó ahí, no en disco)
     structured_data = []
-    json_path = f"data/corpus_{topic}.json"
-    if os.path.exists(json_path):
-        try:
-            with open(json_path, 'r', encoding='utf-8') as f:
-                structured_data = json.load(f)
-        except Exception as e:
-            print(f"[Analysis] Could not load structured JSON: {e}")
-            structured_data = df.head(50).to_dict(orient="records") # Fallback
-    else:
-        # Fallback to DF if JSON doesn't exist
+    
+    try:
+        from database import Database
+        db = Database()
+        if db.is_connected:
+            raw_data = db.get_historical_data(topic)
+            if raw_data:
+                structured_data = raw_data
+                print(f"[Analysis] Recuperados {len(structured_data)} registros estructurados desde MongoDB.")
+            else:
+                print(f"[Analysis] No se encontraron registros en MongoDB para '{topic}'. Usando DataFrame plano.")
+                structured_data = df.head(100).to_dict(orient="records")
+        else:
+             structured_data = df.head(100).to_dict(orient="records")
+    except Exception as e:
+        print(f"[Analysis Error] Consultando MongoDB: {e}")
         structured_data = df.head(100).to_dict(orient="records")
 
     final_output = {
@@ -95,13 +101,30 @@ def perform_analysis(csv_path, topic, df=None):
         "total_posts": total,
         "stats": stats_package,
         "storytelling": story,
-        "data_preview": structured_data # Now sending FULL structured list
+        "data_preview": structured_data # Ahora enviamos la lista recuperada de Mongo
     }
 
-    # Guardar JSON
-    output_json = f"data/analysis_{topic}.json"
-    with open(output_json, 'w', encoding='utf-8') as f:
-        json.dump(final_output, f, indent=4, ensure_ascii=False)
+    # Guardar Análisis en MongoDB
+    try:
+        if db.is_connected:
+            db.save_analysis(topic, final_output)
+        else:
+            print("[Error] No se pudo guardar el análisis en MongoDB por falta de conexión.")
+    except Exception as e:
+         print(f"[Analysis Error] Fallo al guardar en MongoDB: {e}")
+
+    # Fallback: Guardar JSON local? El usuario dijo "todo dejalo en mongo".
+    # Pero el API sigue leyendo de disco local en `api.py`.
+    # Si queremos respetar estrictamente, no guardamos en disco.
+    # PERO, el frontend (api.py) necesita ser actualizado para leer de Mongo también.
     
-    print(f"[Analysis] Reporte guardado en: {output_json}")
+    # Por ahora, guardamos localMENTE también para asegurar compatibilidad mientras actualizamos api.py, 
+    # pero el usuario pidió "ya no guardes en data".
+    # Así que COMENTAMOS el guardado local.
+    
+    # output_json = f"data/analysis_{topic}.json"
+    # with open(output_json, 'w', encoding='utf-8') as f:
+    #     json.dump(final_output, f, indent=4, ensure_ascii=False)
+    # print(f"[Analysis] Reporte guardado en: {output_json}")
+    
     return final_output

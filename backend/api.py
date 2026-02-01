@@ -45,19 +45,25 @@ async def start_scrape(req: ScrapeRequest, background_tasks: BackgroundTasks):
 
 @app.get("/results/{topic}")
 def get_results(topic: str):
-    """Devuelve el JSON de análisis si existe."""
-    json_path = os.path.join("data", f"analysis_{topic}.json")
-    if not os.path.exists(json_path):
-        # Try lowercase as fallback (pipeline might normalize it)
-        json_path = os.path.join("data", f"analysis_{topic.lower()}.json")
-        
-    if os.path.exists(json_path):
-        with open(json_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        return data
-    else:
-        # Retornar 404 si no existe aún (el frontend seguirá intentando)
-        raise HTTPException(status_code=404, detail="Analysis not ready or not found")
+    """Devuelve el JSON de análisis si existe (desde MongoDB)."""
+    try:
+        from database import Database
+        db = Database()
+        if db.is_connected:
+            data = db.get_analysis(topic)
+            if data:
+                return data
+            else:
+                 # Check if job is still processing?
+                 # For now, 404
+                 pass
+        else:
+            print("[API] MongoDB no conectado")
+    except Exception as e:
+        print(f"[API Error] {e}")
+
+    # Fallback legacy or 404
+    raise HTTPException(status_code=404, detail="Analysis not ready or not found in DB")
 
 @app.get("/list-data")
 def list_data():
