@@ -26,7 +26,7 @@ const llmStatus = computed(() => status.value?.llm_status || 'pending');
 
 function getIcon(platform) {
     const p = platform.toLowerCase();
-    if (p.includes('twitter') || p.includes('x')) return 'fa-brands fa-x-twitter'; // Use x-twitter or twitter
+    if (p.includes('twitter') || p.includes('x')) return 'fa-brands fa-twitter'; // Fallback to bird if X icon missing
     if (p.includes('facebook')) return 'fa-brands fa-facebook';
     if (p.includes('linkedin')) return 'fa-brands fa-linkedin';
     if (p.includes('instagram')) return 'fa-brands fa-instagram';

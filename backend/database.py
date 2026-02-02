@@ -151,7 +151,7 @@ class Database:
             res1 = analysis_coll.delete_one({"topic": topic})
             
             # Eliminar posts (Opcional, pero para limpieza completa)
-            # res2 = self.collection.delete_many({"topic": topic})
+            res2 = self.collection.delete_many({"topic": topic})
             
             # Si se borró algo, retornamos True
             if res1.deleted_count > 0:

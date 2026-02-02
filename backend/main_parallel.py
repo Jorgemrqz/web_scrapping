@@ -99,7 +99,8 @@ def run_pipeline(topic: str, limit: int = 10):
     pool.close()
     pool.join()
     
-    print(f"\n[Terminado] Se han recolectado {len(all_data)} registros.")
+    unique_posts_count = len(set((x.get('platform'), x.get('post_index')) for x in all_data))
+    print(f"\n[Terminado] Se han recolectado {len(all_data)} registros (Comentarios/Interacciones) correspondientes a {unique_posts_count} posts únicos.")
     
     csv_path = None
     
