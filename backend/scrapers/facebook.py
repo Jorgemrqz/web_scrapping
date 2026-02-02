@@ -204,6 +204,17 @@ def scrape_facebook(topic, email, password, target_count=10):
                         # time.sleep(1) 
                         
                         # --- 0. EXTRAER INFO DEL POST (Autor y Texto) ---
+                        
+                        # Intentar expandir texto "Ver más" del post
+                        try:
+                            see_more_post = post_body.locator('div[role="button"], span[role="button"]').filter(has_text="Ver más").first
+                            if see_more_post.count() > 0 and see_more_post.is_visible():
+                                # Verificamos que no sea el "Ver más comentarios" (que suele estar abajo)
+                                # Normalmente el del post está más arriba, pero por si acaso, probamos.
+                                see_more_post.click(force=True)
+                                time.sleep(0.5)
+                        except: pass
+
                         try:
                             # Autor: Estrategia Mejorada
                             post_author = "Desconocido"
