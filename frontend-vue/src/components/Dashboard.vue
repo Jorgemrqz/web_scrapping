@@ -70,154 +70,157 @@ function getPlatformLabel(p) {
 }
 
 // Charts Logic
+// Charts Logic
 function renderCharts() {
     if (!props.dashboardData) return;
     
     const stats = props.dashboardData.stats;
     const platforms = Object.keys(stats.by_platform);
     
-    // --- 1. Global Chart (Doughnut) ---
-    const ctxGlobal = document.getElementById('globalChart');
-    if (ctxGlobal) {
-        if (globalChartInstance.value) globalChartInstance.value.destroy();
-        const counts = stats.global_counts;
-        globalChartInstance.value = new Chart(ctxGlobal, {
-            type: 'doughnut',
-            data: {
-                labels: ['Positivo', 'Neutro', 'Negativo'],
-                datasets: [{
-                    data: [counts['Positivo']||0, counts['Neutro']||0, counts['Negativo']||0],
-                    backgroundColor: ['#10b981', '#94a3b8', '#ef4444'],
-                    borderWidth: 0,
-                    hoverOffset: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { color: '#cbd5e1', font: {family: 'Outfit'} } } },
-                layout: { padding: 10 }
-            }
-        });
-    }
-
-    // --- 2. Engagement Chart (Pie - Volume per platform) ---
-    const ctxEngagement = document.getElementById('engagementChart');
-    if (ctxEngagement) {
-        if (engagementChartInstance.value) engagementChartInstance.value.destroy();
-        
-        // Calculate total posts per platform
-        const platformVolumes = platforms.map(p => {
-            const c = stats.by_platform[p];
-            return (c['Positivo']||0) + (c['Neutro']||0) + (c['Negativo']||0);
-        });
-
-        engagementChartInstance.value = new Chart(ctxEngagement, {
-            type: 'pie',
-            data: {
-                labels: platforms.map(getPlatformLabel),
-                datasets: [{
-                    data: platformVolumes,
-                    backgroundColor: ['#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#10b981'],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { color: '#cbd5e1' } } }
-            }
-        });
-    }
-
-    // --- 3. Platform Stacked Bar Chart ---
-    const ctxPlatform = document.getElementById('platformChart');
-    if (ctxPlatform) {
-        if (platformChartInstance.value) platformChartInstance.value.destroy();
-        
-        const colors = { 'Positivo': '#10b981', 'Neutro': '#94a3b8', 'Negativo': '#ef4444' };
-        
-        const datasets = ['Positivo', 'Neutro', 'Negativo'].map(sent => ({
-            label: sent,
-            data: platforms.map(p => stats.by_platform[p][sent] || 0),
-            backgroundColor: colors[sent],
-            borderRadius: 4
-        }));
-
-        platformChartInstance.value = new Chart(ctxPlatform, {
-            type: 'bar',
-            data: {
-                labels: platforms.map(getPlatformLabel),
-                datasets: datasets
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: { stacked: true, ticks: { color: '#94a3b8' }, grid: { display: false } },
-                    y: { stacked: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+    // --- 1. Global & Engagement (Overview Tab) ---
+    if (props.activeTab === 'overview') {
+        const ctxGlobal = document.getElementById('globalChart');
+        if (ctxGlobal) {
+            if (globalChartInstance.value) globalChartInstance.value.destroy();
+            const counts = stats.global_counts;
+            globalChartInstance.value = new Chart(ctxGlobal, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Positivo', 'Neutro', 'Negativo'],
+                    datasets: [{
+                        data: [counts['Positivo']||0, counts['Neutro']||0, counts['Negativo']||0],
+                        backgroundColor: ['#10b981', '#94a3b8', '#ef4444'],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
                 },
-                plugins: { legend: { labels: { color: '#cbd5e1' } } }
-            }
-        });
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { color: '#cbd5e1', font: {family: 'Outfit'} } } },
+                    layout: { padding: 10 }
+                }
+            });
+        }
+
+        const ctxEngagement = document.getElementById('engagementChart');
+        if (ctxEngagement) {
+            if (engagementChartInstance.value) engagementChartInstance.value.destroy();
+            
+            // Calculate total posts per platform
+            const platformVolumes = platforms.map(p => {
+                const c = stats.by_platform[p];
+                return (c['Positivo']||0) + (c['Neutro']||0) + (c['Negativo']||0);
+            });
+
+            engagementChartInstance.value = new Chart(ctxEngagement, {
+                type: 'pie',
+                data: {
+                    labels: platforms.map(getPlatformLabel),
+                    datasets: [{
+                        data: platformVolumes,
+                        backgroundColor: ['#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#10b981'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { color: '#cbd5e1' } } }
+                }
+            });
+        }
     }
 
-    // --- 4. Radar Chart (Sentiment Intensity Analysis) ---
-    const ctxRadar = document.getElementById('radarChart');
-    if (ctxRadar) {
-        if (radarChartInstance.value) radarChartInstance.value.destroy();
-        
-        // Calculate % Positive and % Negative per platform
-        const posRates = [];
-        const negRates = [];
-        
-        platforms.forEach(p => {
-            const c = stats.by_platform[p];
-            const total = (c['Positivo']||0) + (c['Neutro']||0) + (c['Negativo']||0);
-            if (total > 0) {
-                posRates.push(((c['Positivo']||0) / total * 100).toFixed(1));
-                negRates.push(((c['Negativo']||0) / total * 100).toFixed(1));
-            } else {
-                posRates.push(0);
-                negRates.push(0);
-            }
-        });
+    // --- 2. Platform & Radar (Platforms Tab) ---
+    if (props.activeTab === 'platforms') {
+        const ctxPlatform = document.getElementById('platformChart');
+        if (ctxPlatform) {
+            if (platformChartInstance.value) platformChartInstance.value.destroy();
+            
+            const colors = { 'Positivo': '#10b981', 'Neutro': '#94a3b8', 'Negativo': '#ef4444' };
+            
+            const datasets = ['Positivo', 'Neutro', 'Negativo'].map(sent => ({
+                label: sent,
+                data: platforms.map(p => stats.by_platform[p][sent] || 0),
+                backgroundColor: colors[sent],
+                borderRadius: 4
+            }));
 
-        radarChartInstance.value = new Chart(ctxRadar, {
-            type: 'radar',
-            data: {
-                labels: platforms.map(getPlatformLabel),
-                datasets: [
-                    {
-                        label: '% Positividad',
-                        data: posRates,
-                        backgroundColor: 'rgba(16, 185, 129, 0.2)',
-                        borderColor: '#10b981',
-                        pointBackgroundColor: '#10b981'
+            platformChartInstance.value = new Chart(ctxPlatform, {
+                type: 'bar',
+                data: {
+                    labels: platforms.map(getPlatformLabel),
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: true, ticks: { color: '#94a3b8' }, grid: { display: false } },
+                        y: { stacked: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
                     },
-                    {
-                        label: '% Negatividad',
-                        data: negRates,
-                        backgroundColor: 'rgba(239, 68, 68, 0.2)',
-                        borderColor: '#ef4444',
-                        pointBackgroundColor: '#ef4444'
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    r: {
-                        angleLines: { color: 'rgba(255,255,255,0.1)' },
-                        grid: { color: 'rgba(255,255,255,0.1)' },
-                        pointLabels: { color: '#cbd5e1', font: { size: 12 } },
-                        ticks: { backdropColor: 'transparent', color: '#94a3b8' }
-                    }
+                    plugins: { legend: { labels: { color: '#cbd5e1' } } }
+                }
+            });
+        }
+
+        const ctxRadar = document.getElementById('radarChart');
+        if (ctxRadar) {
+            if (radarChartInstance.value) radarChartInstance.value.destroy();
+            
+            // Calculate % Positive and % Negative per platform
+            const posRates = [];
+            const negRates = [];
+            
+            platforms.forEach(p => {
+                const c = stats.by_platform[p];
+                const total = (c['Positivo']||0) + (c['Neutro']||0) + (c['Negativo']||0);
+                if (total > 0) {
+                    posRates.push(((c['Positivo']||0) / total * 100).toFixed(1));
+                    negRates.push(((c['Negativo']||0) / total * 100).toFixed(1));
+                } else {
+                    posRates.push(0);
+                    negRates.push(0);
+                }
+            });
+
+            radarChartInstance.value = new Chart(ctxRadar, {
+                type: 'radar',
+                data: {
+                    labels: platforms.map(getPlatformLabel),
+                    datasets: [
+                        {
+                            label: '% Positividad',
+                            data: posRates,
+                            backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                            borderColor: '#10b981',
+                            pointBackgroundColor: '#10b981'
+                        },
+                        {
+                            label: '% Negatividad',
+                            data: negRates,
+                            backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                            borderColor: '#ef4444',
+                            pointBackgroundColor: '#ef4444'
+                        }
+                    ]
                 },
-                plugins: { legend: { labels: { color: '#cbd5e1' } } }
-            }
-        });
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            angleLines: { color: 'rgba(255,255,255,0.1)' },
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            pointLabels: { color: '#cbd5e1', font: { size: 12 } },
+                            ticks: { backdropColor: 'transparent', color: '#94a3b8' }
+                        }
+                    },
+                    plugins: { legend: { labels: { color: '#cbd5e1' } } }
+                }
+            });
+        }
     }
 }
 
