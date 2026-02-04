@@ -291,6 +291,7 @@ body {
   width: 60px;
   text-align: center;
   font-family: inherit;
+  appearance: textfield;
   -moz-appearance: textfield;
   /* Firefox */
 }
