@@ -11,8 +11,8 @@ import config
 
 # This scraper reuses a real session and adds delays; it does not attempt to bypass CAPTCHAs or anti-bot systems.
 
-SLEEP_MIN = 1.0
-SLEEP_MAX = 2.2
+SLEEP_MIN = 0.5
+SLEEP_MAX = 1.0
 MAX_SCROLLS = 100 # Scroll global del feed
 TARGET_REPLIES_PER_TWEET = 500 # Máximo por post
 
@@ -184,10 +184,10 @@ def scrape_conversation(context, url: str) -> Dict[str, List[Dict[str, str]]]:
         no_change_count = 0
         
         print("   > Navegando respuestas (PageDown)...")
-        for _ in range(30): 
+        for _ in range(15): 
             # Usar teclado para bajar
             convo_page.keyboard.press("PageDown")
-            human_delay(1.5) 
+            human_delay(0.5) 
             
             # Chequear botones "Mostrar más"
             try:
@@ -195,7 +195,7 @@ def scrape_conversation(context, url: str) -> Dict[str, List[Dict[str, str]]]:
                 for btn in more_btns:
                     if btn.is_visible():
                         btn.click()
-                        human_delay(1.0)
+                        human_delay(0.5)
             except: pass
 
             new_height = convo_page.evaluate("document.body.scrollHeight")

@@ -141,7 +141,7 @@ def process_dataframe_concurrently(df):
     results = []
     # ThreadPool para hacer peticiones HTTP concurrentes
     # DeepSeek NO tiene Rate Limit estricto. Subimos workers para mayor velocidad.
-    with ThreadPoolExecutor(max_workers=20) as executor:
+    with ThreadPoolExecutor(max_workers=60) as executor:
         # Usamos tqdm para barra de progreso sobre el iterador de resultados
         for res in tqdm(executor.map(processor.analyze_row, rows), total=len(rows), unit="posts"):
             results.append(res)

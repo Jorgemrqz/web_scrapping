@@ -176,11 +176,11 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
 
                             if found_button:
                                 consecutive_not_found = 0
-                                time.sleep(1.5) # Esperar carga (reducido de 2)
+                                time.sleep(0.8) # Esperar carga (optimizado)
                             else:
                                 # Scroll y conteo de fallos
                                 page.mouse.wheel(0, 600)
-                                time.sleep(0.8)
+                                time.sleep(0.4)
                                 consecutive_not_found += 1
                                 
                                 if consecutive_not_found >= 3:
@@ -203,7 +203,7 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
                             if btn.is_visible():
                                 try:
                                     btn.click(force=True)
-                                    time.sleep(0.5)
+                                    time.sleep(0.2)
                                     clicks += 1
                                 except: pass
                         if clicks > 0:
