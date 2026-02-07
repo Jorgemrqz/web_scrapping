@@ -3,7 +3,7 @@ import json
 import os
 from llm_processor import LLMProcessor
 
-def perform_analysis(csv_path, topic, df=None):
+def perform_analysis(csv_path, topic, df=None, timings=None):
     """
     Lee el DF (o CSV/JSON), calcula estadísticas de sentimiento
     y genera el storytelling con DeepSeek.
@@ -101,6 +101,7 @@ def perform_analysis(csv_path, topic, df=None):
         "total_posts": total,
         "stats": stats_package,
         "storytelling": story,
+        "timings": timings, # Duraciones de ejecución
         "data_preview": structured_data # Ahora enviamos la lista recuperada de Mongo
     }
 

@@ -120,7 +120,7 @@ const getPlatformName = (p) => {
                     <!-- Removed Filler Rows to save space since we have infinite scroll -->
 
                     <!-- Comment Pagination Controls -->
-                    <tr v-if="post.comments.length > 5">
+                    <tr v-if="post.comments && post.comments.length > 5">
                         <td colspan="3" style="text-align: center; border-bottom: 1px solid var(--glass-border); padding: 8px;">
                             <div style="display: flex; justify-content: center; align-items: center; gap: 15px; font-size: 0.85em; color: var(--text-secondary);">
                                 <button 

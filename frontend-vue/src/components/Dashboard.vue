@@ -320,6 +320,10 @@ defineExpose({
                     <h3><i class="fa-solid fa-lightbulb"></i> Insights IA</h3>
                 </div>
                 <div class="quick-insights" v-html="quickInsight"></div>
+                <div v-if="dashboardData?.timings" style="margin-top: 15px; font-size: 0.8em; color: var(--text-secondary); border-top: 1px dashed var(--glass-border); padding-top: 10px; display: flex; align-items: center; gap: 15px;">
+                    <span><i class="fa-solid fa-clock"></i> <strong>Tiempo Scraping:</strong> {{ dashboardData.timings.scraping?.toFixed(2) || 'N/A' }}s</span>
+                    <span><i class="fa-solid fa-brain"></i> <strong>Tiempo LLM:</strong> {{ dashboardData.timings.llm?.toFixed(2) || 'N/A' }}s</span>
+                </div>
             </div>
         </div>
 

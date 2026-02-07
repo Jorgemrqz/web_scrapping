@@ -1,6 +1,8 @@
 import multiprocessing
 import json
 import os
+import time
+import csv
 from datetime import datetime
 import pandas as pd
 
@@ -71,6 +73,7 @@ def run_pipeline(topic: str, limit: int = 10):
     except: db = None
 
     # Crear procesos
+    start_time_scraping = time.time()
     pool = multiprocessing.Pool(processes=4) # 4 Processes
     
     tasks = []
@@ -99,6 +102,13 @@ def run_pipeline(topic: str, limit: int = 10):
     pool.close()
     pool.join()
     
+    scraping_duration = time.time() - start_time_scraping
+    print(f"\n[Stats] Tiempo total de Scraping: {scraping_duration:.2f} segundos")
+
+    if db and db.is_connected:
+        db.update_job_timings(topic, scraping_time=scraping_duration)
+
+    
     unique_posts_count = len(set((x.get('platform'), x.get('post_index')) for x in all_data))
     print(f"\n[Terminado] Se han recolectado {len(all_data)} registros (Comentarios/Interacciones) correspondientes a {unique_posts_count} posts únicos.")
     
@@ -109,15 +119,20 @@ def run_pipeline(topic: str, limit: int = 10):
         df = pd.DataFrame(all_data)
 
         # FASE 2: PROCESAMIENTO CON LLMs 
+        llm_duration = 0
         try:
             print("\n[INFO] Iniciando Fase 2: Clasificación de Sentimiento con LLMs...")
             if db and db.is_connected:
                 db.update_llm_status(topic, "running")
 
+            start_time_llm = time.time()
             df = process_dataframe_concurrently(df)
+            llm_duration = time.time() - start_time_llm
+            print(f"[Stats] Tiempo total de Clasificación LLM: {llm_duration:.2f} segundos")
             
             if db and db.is_connected:
                 db.update_llm_status(topic, "completed")
+                db.update_job_timings(topic, llm_time=llm_duration)
             print("[INFO] Fase 2 completada.")
         except Exception as e:
             print(f"\n[WARN] No se pudo ejecutar el análisis de LLMs: {e}")
@@ -196,9 +211,40 @@ def run_pipeline(topic: str, limit: int = 10):
         try:
             print("\n[Orquestador] Generando Informe Ejecutivo (Storytelling)...")
             # Pass DF directly to avoid re-reading
-            perform_analysis(None, topic, df=df)
+            timings = {"scraping": scraping_duration, "llm": llm_duration}
+            perform_analysis(None, topic, df=df, timings=timings)
         except Exception as e:
              print(f"[Analysis Error] No se pudo generar el reporte JSON: {e}")
+
+    # Guardar Tiempos en CSV local (data/execution_times.csv)
+    try:
+        if not os.path.exists("data"):
+            os.makedirs("data")
+            
+        log_file = "data/execution_times.csv"
+        file_exists = os.path.isfile(log_file)
+        
+        # Variables seguras
+        s_dur = scraping_duration if 'scraping_duration' in locals() else 0.0
+        l_dur = llm_duration if 'llm_duration' in locals() else 0.0
+        rec_count = len(all_data) if 'all_data' in locals() else 0
+        
+        with open(log_file, mode='a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(["Timestamp", "Topic", "Limit", "Scraping_Time_Sec", "LLM_Time_Sec", "Total_Records"])
+            
+            writer.writerow([
+                datetime.now().isoformat(),
+                topic,
+                limit, 
+                f"{s_dur:.2f}",
+                f"{l_dur:.2f}",
+                rec_count
+            ])
+            print(f"[Stats] Tiempos registrados en '{log_file}'")
+    except Exception as e:
+        print(f"[Error] No se pudo guardar el log CSV: {e}")
 
     return csv_path
 

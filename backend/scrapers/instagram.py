@@ -73,6 +73,10 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
             
             # Scrollear hasta tener suficientes
             while len(post_urls) < target_count and scrolls < 10:
+                # Check Cancel
+                if db and db.is_connected and db.check_cancellation(topic):
+                    print(f"[Instagram] Cancelación detectada durante recolección. Abortando...")
+                    break
                 # Extraer hrefs que cumplan patrón /p/ o /reel/
                 hrefs = page.locator('a[href^="/p/"], a[href^="/reel/"]').all()
                 for link in hrefs:
@@ -103,6 +107,9 @@ def scrape_instagram(topic: str, username: str, password: str, target_count: int
                 
                  # Report Progress
                 if db and db.is_connected:
+                    if db.check_cancellation(topic):
+                        print(f"[Instagram] Cancelación detectada para '{topic}'. Deteniendo...")
+                        break
                     db.update_stage_progress(topic, "instagram", i+1, "running")
 
                 try:

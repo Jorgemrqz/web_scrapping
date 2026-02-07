@@ -370,7 +370,7 @@ def scrape_twitter(topic: str, username: str, password: str, target_count: int =
         if not context:
             try:
                 args = [
-                    "--start-maximized",
+                    "--window-size=1920,1080", # Mejor para headless que start-maximized
                     "--disable-gpu",
                     "--no-sandbox",
                     "--disable-features=FedCm,FederatedCredentialManagement,PrivacySandboxAdsApis",

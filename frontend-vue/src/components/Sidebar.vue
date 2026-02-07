@@ -6,7 +6,8 @@ const props = defineProps({
     activeTab: String,
     currentView: String,
     searchHistory: Array,
-    hasData: Boolean
+    hasData: Boolean,
+    isLoading: Boolean
 });
 
 const emit = defineEmits([
@@ -96,8 +97,9 @@ function loadHistoryItem(topic) {
         <div style="flex: 1;"></div>
 
         <div class="nav-footer">
-            <button class="new-search-btn" @click="$emit('reset-search')" title="Nueva Búsqueda">
-                <i class="fa-solid fa-magnifying-glass"></i> <span v-if="!isSidebarCollapsed">Nueva Búsqueda</span>
+            <button class="new-search-btn" :class="{ 'pulsing-btn': isLoading }" @click="$emit('reset-search')" :title="isLoading ? 'Ver Progreso' : 'Nueva Búsqueda'">
+                <i :class="isLoading ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-magnifying-glass'"></i> 
+                <span v-if="!isSidebarCollapsed">{{ isLoading ? 'Ver Progreso' : 'Nueva Búsqueda' }}</span>
             </button>
         </div>
 
@@ -214,5 +216,11 @@ function loadHistoryItem(topic) {
   max-height: 0;
   opacity: 0;
   margin-top: 0;
+}
+
+.pulsing-btn {
+    background: rgba(59, 130, 246, 0.2) !important;
+    border: 1px solid rgba(59, 130, 246, 0.5) !important;
+    color: #60a5fa !important;
 }
 </style>

@@ -58,6 +58,9 @@ def scrape_linkedin(topic, email, password, target_count=10):
 
                 # Report Progress
                 if db and db.is_connected:
+                    if db.check_cancellation(topic):
+                        print(f"[LinkedIn] Cancelación detectada para '{topic}'. Abortando...")
+                        break
                     db.update_stage_progress(topic, "linkedin", total_posts_extracted, "running")
                 
                 found_posts = []

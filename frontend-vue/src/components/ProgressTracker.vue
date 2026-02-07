@@ -34,9 +34,30 @@ function getIcon(platform) {
 }
 
 function getStatusIcon(stageStatus) {
+    if (status.value?.cancelled && stageStatus === 'running') {
+        return 'fa-solid fa-ban has-text-danger';
+    }
     if (stageStatus === 'completed') return 'fa-solid fa-circle-check has-text-success';
     if (stageStatus === 'running') return 'fa-solid fa-spinner fa-spin';
     return 'fa-regular fa-circle';
+}
+
+const isCancelling = ref(false);
+
+async function cancelScrape() {
+    if (!confirm('¿Seguro que quieres detener el análisis?')) return;
+    isCancelling.value = true;
+    try {
+        const res = await fetch(`${props.apiUrl}/cancel`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic: props.topic })
+        });
+        if (!res.ok) throw new Error("Error en servidor");
+    } catch(e) {
+        console.error("Cancellation failed", e);
+        isCancelling.value = false;
+    }
 }
 
 function pollStatus() {
@@ -45,6 +66,9 @@ function pollStatus() {
             const res = await fetch(`${props.apiUrl}/status/${props.topic}`);
             if (res.ok) {
                 status.value = await res.json();
+                if (status.value.cancelled) {
+                     isCancelling.value = false; // Ya se canceló
+                }
             }
         } catch (e) {
             console.error("Status check failed", e);
@@ -66,7 +90,7 @@ onUnmounted(() => {
         <h3><i class="fa-solid fa-microchip"></i> Estado del Análisis</h3>
         
         <div class="stages-list">
-            <div v-for="(data, platform) in stages" :key="platform" class="stage-item" :class="{ 'active': data.status === 'running', 'done': data.status === 'completed' }">
+            <div v-for="(data, platform) in stages" :key="platform" class="stage-item" :class="{ 'active': data.status === 'running' && !status?.cancelled, 'done': data.status === 'completed' }">
                 <div class="stage-icon">
                     <i :class="getIcon(platform)"></i>
                 </div>
@@ -81,7 +105,7 @@ onUnmounted(() => {
             
             <div class="divider"></div>
 
-            <div class="stage-item" :class="{ 'active': llmStatus === 'running', 'done': llmStatus === 'completed' }">
+            <div class="stage-item" :class="{ 'active': llmStatus === 'running' && !status?.cancelled, 'done': llmStatus === 'completed' }">
                  <div class="stage-icon">
                     <i class="fa-solid fa-brain"></i>
                 </div>
@@ -96,6 +120,13 @@ onUnmounted(() => {
                 </div>
             </div>
 
+        </div>
+
+        <div class="actions-area">
+            <button @click="cancelScrape" class="cancel-btn" :disabled="isCancelling || status?.cancelled">
+                <i class="fa-solid" :class="isCancelling ? 'fa-spinner fa-spin' : 'fa-ban'"></i> 
+                {{ status?.cancelled ? 'Cancelado' : (isCancelling ? 'Deteniendo...' : 'Cancelar Análisis') }}
+            </button>
         </div>
     </div>
 </template>
@@ -193,5 +224,39 @@ onUnmounted(() => {
     height: 1px;
     background: rgba(255,255,255,0.1);
     margin: 5px 0;
+}
+
+.actions-area {
+    margin-top: 20px;
+    display: flex;
+    justify-content: center;
+}
+
+.cancel-btn {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    color: #ef4444;
+    padding: 8px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: 500;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cancel-btn:hover:not(:disabled) {
+    background: #ef4444;
+    color: white;
+}
+
+.cancel-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: rgba(255,255,255,0.05);
+    border-color: transparent;
+    color: var(--text-secondary);
 }
 </style>

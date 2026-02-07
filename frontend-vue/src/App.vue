@@ -14,6 +14,8 @@ const isSidebarCollapsed = ref(false);
 const topic = ref('');
 const limit = ref(10);
 const isLoading = ref(false);
+const isScraping = ref(false);
+const scrapingTopic = ref('');
 const statusText = ref('Listo para conectar con redes sociales.');
 const statusColor = ref('text-secondary'); 
 
@@ -47,6 +49,9 @@ async function startAnalysis() {
     }
 
     isLoading.value = true;
+    isScraping.value = true;
+    scrapingTopic.value = topic.value;
+    localStorage.setItem('activeScrapeTopic', topic.value);
     statusText.value = "🚀 Iniciando agentes de scraping...";
     statusColor.value = "text-secondary";
 
@@ -73,20 +78,55 @@ async function startAnalysis() {
 function pollResults() {
     const interval = setInterval(async () => {
         try {
-            const res = await fetch(`${API_URL}/results/${encodeURIComponent(topic.value)}`);
+            // USAR scrapingTopic, no topic, para evitar conflictos si el usuario cambia de vista
+            if (!scrapingTopic.value) return; 
+
+            // Verificar Status primero (más robusto)
+            const statusRes = await fetch(`${API_URL}/status/${encodeURIComponent(scrapingTopic.value)}`);
+            if (statusRes.ok) {
+                const statusData = await statusRes.json();
+                if (statusData.cancelled) {
+                     clearInterval(interval);
+                     statusText.value = "⛔ Análisis cancelado.";
+                     isScraping.value = false;
+                     isLoading.value = false;
+                     localStorage.removeItem('activeScrapeTopic');
+                     return;
+                }
+            }
+
+            // Verificar Resultados
+            const res = await fetch(`${API_URL}/results/${encodeURIComponent(scrapingTopic.value)}`);
             if (res.status === 200) {
                 const data = await res.json();
                 clearInterval(interval);
                 
                 statusText.value = "✅ ¡Análisis Completado!";
-                setTimeout(() => {
-                    loadDashboard(data);
-                    fetchHistory(); 
-                }, 500);
+                isScraping.value = false;
+                localStorage.removeItem('activeScrapeTopic');
+                
+                // Solo cargar dashboard automáticamente si el usuario no cambió de tema
+                if (topic.value === scrapingTopic.value) {
+                    setTimeout(() => {
+                        loadDashboard(data);
+                        fetchHistory(); 
+                    }, 500);
+                } else {
+                     // Notificar o actualizar historial silenciosamente
+                     fetchHistory();
+                     alert(`¡El análisis de "${scrapingTopic.value}" ha terminado!`);
+                }
+
             } else if (res.status !== 404) {
-                clearInterval(interval);
-                statusText.value = "❌ Error en el análisis.";
-                isLoading.value = false;
+                 if (res.status >= 500) {
+                     console.warn(`Server Error ${res.status}. Retrying polling...`);
+                 } else {
+                    clearInterval(interval);
+                    statusText.value = "❌ Error Fatal en el análisis.";
+                    isLoading.value = false;
+                    isScraping.value = false;
+                    localStorage.removeItem('activeScrapeTopic');
+                 }
             }
         } catch (e) {
             console.log("Polling error", e);
@@ -135,6 +175,15 @@ async function loadHistoryItem(itemTopic) {
 }
 
 function resetSearch() {
+    if (isScraping.value) {
+        // Volver al Progreso
+        topic.value = scrapingTopic.value;
+        dashboardData.value = null;
+        currentView.value = 'search';
+        isLoading.value = true;
+        return;
+    }
+    // Nueva búsqueda
     dashboardData.value = null;
     currentView.value = 'search';
     topic.value = '';
@@ -160,6 +209,20 @@ async function fetchHistory() {
 
 onMounted(async () => {
     fetchHistory();
+    fetchHistory();
+    
+    // Recuperar sesión de scraping si existe
+    const savedTopic = localStorage.getItem('activeScrapeTopic');
+    if (savedTopic) {
+        console.log("Restaurando sesión de scraping para:", savedTopic);
+        topic.value = savedTopic;
+        scrapingTopic.value = savedTopic;
+        isScraping.value = true;
+        isLoading.value = true; // Mostrar tracker
+        statusText.value = "🔄 Reconectando con proceso activo...";
+        pollResults(); // Reiniciar polling
+    }
+
     try {
         const response = await fetch(`${API_URL}/`);
         if (response.ok) {
@@ -205,6 +268,7 @@ async function deleteHistoryItem(itemTopic) {
         :currentView="currentView"
         :searchHistory="searchHistory"
         :hasData="hasData"
+        :isLoading="isScraping"
         @toggle-sidebar="toggleSidebar"
         @reset-search="resetSearch"
         @switch-tab="switchTab"

@@ -175,6 +175,7 @@ class Database:
                 "topic": topic,
                 "stages": stages,
                 "llm_status": "pending", # pending, running, completed
+                "cancelled": False,
                 "updated_at": datetime.now()
             }
             status_coll.update_one({"topic": topic}, {"$set": doc}, upsert=True)
@@ -218,3 +219,45 @@ class Database:
             return status_coll.find_one({"topic": topic}, {"_id": 0})
         except Exception as e:
              return None
+
+    def cancel_job(self, topic):
+        """Activa la bandera de cancelación para un topic"""
+        if not self.is_connected: return False
+        try:
+            status_coll = self.db["job_status"]
+            status_coll.update_one(
+                {"topic": topic},
+                {"$set": {"cancelled": True, "updated_at": datetime.now()}}
+            )
+            print(f"[MongoDB] Flag de cancelación activado para '{topic}'")
+            return True
+        except Exception as e:
+            print(f"[MongoDB] Error cancelando job: {e}")
+            return False
+
+    def check_cancellation(self, topic):
+        """Comprueba si el job ha sido cancelado"""
+        if not self.is_connected: return False
+        try:
+            status_coll = self.db["job_status"]
+            doc = status_coll.find_one({"topic": topic}, {"cancelled": 1})
+            return doc.get("cancelled", False) if doc else False
+        except: return False
+
+    def update_job_timings(self, topic, scraping_time=None, llm_time=None):
+        """Actualiza los tiempos de ejecución del job (en segundos)"""
+        if not self.is_connected: return
+        try:
+            status_coll = self.db["job_status"]
+            update_data = {"updated_at": datetime.now()}
+            if scraping_time is not None:
+                update_data["timings.scraping"] = scraping_time
+            if llm_time is not None:
+                update_data["timings.llm"] = llm_time
+                
+            status_coll.update_one(
+                {"topic": topic},
+                {"$set": update_data}
+            )
+        except Exception as e:
+            print(f"[MongoDB] Error actualizando timings: {e}")

@@ -168,7 +168,11 @@ def scrape_facebook(topic, email, password, target_count=10):
             while posts_scraped < target_count and scroll_attempts < max_scrolls_total:
                 
                 # Report Progress
+                # Report Progress
                 if db and db.is_connected:
+                    if db.check_cancellation(topic):
+                        print(f"[Facebook] Cancelación detectada para '{topic}'. Abortando...")
+                        break
                     db.update_stage_progress(topic, "facebook", posts_scraped, "running")
 
                 # 1. Identificar posts actuales

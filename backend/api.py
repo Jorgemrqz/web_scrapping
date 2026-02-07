@@ -47,6 +47,21 @@ async def start_scrape(req: ScrapeRequest, background_tasks: BackgroundTasks):
         "topic": req.topic
     }
 
+@app.post("/cancel")
+def cancel_scrape(req: ScrapeRequest):
+    """Cancela un scraping en progreso mediante flag en DB."""
+    try:
+        from database import Database
+        db = Database()
+        if db.is_connected:
+            success = db.cancel_job(req.topic)
+            if success:
+                 return {"status": "cancelled", "topic": req.topic}
+            return {"status": "failed", "detail": "Could not set cancel flag"}
+        return {"status": "error", "detail": "DB not connected"}
+    except Exception as e:
+         return {"status": "error", "detail": str(e)}
+
 @app.get("/results/{topic}")
 def get_results(topic: str):
     """Devuelve el JSON de análisis si existe (desde MongoDB)."""
